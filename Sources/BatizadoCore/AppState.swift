@@ -8,15 +8,21 @@ public struct Preferences: Hashable, Sendable {
     public var keepDisplayOn: Bool
     public var lockOnLidClose: Bool
     public var batteryCutoff: Int
+    public var autoTurnOff: AutoTurnOff
+    /// When the timer turns everything off; stored as an instant so a restart keeps the same end.
+    public var timerDeadline: Instant?
 
     public init(
         keepAwake: Bool = false, keepDisplayOn: Bool = false, lockOnLidClose: Bool = true,
-        batteryCutoff: Int = BatteryCutoff.standard
+        batteryCutoff: Int = BatteryCutoff.standard, autoTurnOff: AutoTurnOff = .never,
+        timerDeadline: Instant? = nil
     ) {
         self.keepAwake = keepAwake
         self.keepDisplayOn = keepDisplayOn
         self.lockOnLidClose = lockOnLidClose
         self.batteryCutoff = batteryCutoff
+        self.autoTurnOff = autoTurnOff
+        self.timerDeadline = timerDeadline
     }
 }
 
@@ -66,6 +72,8 @@ public struct AppState: Equatable, Sendable {
     public private(set) var battery: BatteryReading?
     /// Nil until the thermal state is first read.
     public private(set) var thermal: ThermalState?
+    /// The deadline the warning was posted for, so an extended deadline is warned about again.
+    var warnedDeadline: Instant?
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -75,6 +83,8 @@ public struct AppState: Equatable, Sendable {
     public var keepDisplayOn: Bool { preferences.keepDisplayOn }
     public var lockOnLidClose: Bool { preferences.lockOnLidClose }
     public var batteryCutoff: Int { preferences.batteryCutoff }
+    public var autoTurnOff: AutoTurnOff { preferences.autoTurnOff }
+    public var timerDeadline: Instant? { preferences.timerDeadline }
 
     /// The system's real `SleepDisabled` differs from what the app last asked for.
     public var closedLidDiverged: Bool {
@@ -82,12 +92,35 @@ public struct AppState: Equatable, Sendable {
         return request != sleepDisabled
     }
 
+    /// The next instant the app must send `clockTicked` at: the warning, then the end; nil without a timer.
+    public var nextTimerCheck: Instant? {
+        guard let deadline = timerDeadline else { return nil }
+        return warnedDeadline == deadline ? deadline : deadline - AutoTurnOff.warningLead
+    }
+
     var assertions: Set<PowerAssertion> {
         guard isRunning, keepAwake else { return [] }
         return keepDisplayOn ? [.systemIdle, .displayIdle] : [.systemIdle]
     }
 
-    mutating func apply(_ event: AppEvent) -> [Effect] {
+    mutating func apply(_ event: AppEvent, at now: Instant) -> [Effect] {
+        let effects = handle(event, at: now)
+        keepTimerInStep(at: now)
+        return effects
+    }
+
+    /// While the mode is on with a duration chosen there is a deadline; while it is off there is none.
+    private mutating func keepTimerInStep(at now: Instant) {
+        guard keepAwake else {
+            preferences.timerDeadline = nil
+            return
+        }
+        if preferences.timerDeadline == nil {
+            preferences.timerDeadline = autoTurnOff.deadline(from: now)
+        }
+    }
+
+    private mutating func handle(_ event: AppEvent, at now: Instant) -> [Effect] {
         switch event {
         case .launched: isRunning = true
         case .setKeepAwake(let on):
@@ -99,6 +132,15 @@ public struct AppState: Equatable, Sendable {
             guard on, closedLidRefusal == nil else { return effects }
             return effects + [.requestNotificationPermission]
         case .setLockOnLidClose(let on): preferences.lockOnLidClose = on
+        case .setAutoTurnOff(let duration):
+            preferences.autoTurnOff = duration
+            preferences.timerDeadline = keepAwake ? duration.deadline(from: now) : nil
+            return duration == .never ? [] : [.requestNotificationPermission]
+        case .clockTicked: return checkTimer(at: now)
+        case .extendTimer:
+            guard let deadline = timerDeadline else { return [] }
+            guard now < deadline else { return turnEverythingOff(because: .timer) }
+            preferences.timerDeadline = deadline + AutoTurnOff.extensionLength
         case .setBatteryCutoff(let cutoff):
             preferences.batteryCutoff = cutoff
             return armed ? [.updateArmed(batteryCutoff: cutoff)] : []
@@ -111,12 +153,10 @@ public struct AppState: Equatable, Sendable {
         case .sleepDisabledSwitched(let disabled):
             if !disabled { return disarmIfOff() }
         case .shutdownRecorded(let reason):
+            if reason.isSticky { return turnEverythingOff(because: reason) }
+            // The timer already ended at launch; the crash before it must not turn the mode back on.
+            if lastShutdown?.isSticky == true { return [] }
             lastShutdown = reason
-            if reason.isSticky {
-                let effects = setClosedLid(false)
-                preferences.keepAwake = false
-                return effects + [.notify(reason)]
-            }
             guard helperRule == .installed, closedLidRequest != true else { return [] }
             return setClosedLid(true)
         case .lidChanged(let closed):
@@ -151,6 +191,24 @@ public struct AppState: Equatable, Sendable {
             }
         }
         return []
+    }
+
+    /// A protection or the timer: Closed lid and Keep awake go off and stay off on the next launch.
+    private mutating func turnEverythingOff(because reason: ShutdownReason) -> [Effect] {
+        lastShutdown = reason
+        let effects = setClosedLid(false)
+        preferences.keepAwake = false
+        return effects + [.notify(reason)]
+    }
+
+    private mutating func checkTimer(at now: Instant) -> [Effect] {
+        guard let deadline = timerDeadline else { return [] }
+        if now >= deadline { return turnEverythingOff(because: .timer) }
+        guard warnedDeadline != deadline,
+            now >= deadline - AutoTurnOff.warningLead
+        else { return [] }
+        warnedDeadline = deadline
+        return [.warnTimer(deadline: deadline)]
     }
 
     /// The lid is closed and no external display is active; nil until the lid sensor first reports.

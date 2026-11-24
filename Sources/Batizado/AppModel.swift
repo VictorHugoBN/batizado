@@ -1,5 +1,8 @@
+import AppKit
 import BatizadoCore
+import Foundation
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -21,6 +24,11 @@ final class AppModel {
     // Held for the same reason: their C callbacks point at them and stop only when they are released.
     private let lid: any LidSensing
     private let displays: any ExternalDisplaySensing
+    private let now: () -> Date
+    @ObservationIgnored private var timerCheck: (any DispatchSourceTimer)?
+    @ObservationIgnored private var scheduledCheck: Instant?
+    @ObservationIgnored private var clockObservers: [any NSObjectProtocol] = []
+    private let timerLog = Logger(subsystem: AppInfo.bundleIdentifier, category: "timer")
 
     init(
         assertions: any PowerAssertionHolding = SystemPowerAssertions(),
@@ -34,8 +42,10 @@ final class AppModel {
         screenLock: any ScreenLocking = systemScreenLock(),
         battery: any BatterySensing = SystemBatterySensor(),
         thermal: any ThermalSensing = SystemThermalSensor(),
-        notifier: any Notifying = UserNotifier()
+        notifier: any Notifying = UserNotifier(),
+        now: @escaping () -> Date = Date.init
     ) {
+        self.now = now
         self.assertions = assertions
         self.preferences = preferences
         self.sleepDisabled = sleepDisabled
@@ -49,7 +59,11 @@ final class AppModel {
         self.lid = lid
         self.displays = displays
         state = AppState(preferences: preferences.load())
+        // Before launched, so a deadline that passed while the app was closed turns things off, not on.
+        send(.clockTicked)
         send(.launched)
+        notifier.onExtend = { [weak self] in self?.send(.extendTimer) }
+        watchClock()
         send(.helperRuleChecked(installed: helperRule.isInstalled()))
         sleepDisabled.start { [weak self] in self?.send(.sleepDisabledChanged($0)) }
         helperRule.watch { [weak self] in self?.send(.helperRuleChecked(installed: $0)) }
@@ -63,9 +77,46 @@ final class AppModel {
     }
 
     func send(_ event: AppEvent) {
-        let (next, effects) = reduce(state, event)
+        let (next, effects) = reduce(state, event, at: Instant(now()))
         state = next
         effects.forEach(run)
+        scheduleTimerCheck()
+    }
+
+    /// One wall-clock timer at the next warning or end, not a poll; it still fires after the Mac slept.
+    private func scheduleTimerCheck() {
+        let next = state.nextTimerCheck
+        guard next != scheduledCheck else { return }
+        timerCheck?.cancel()
+        timerCheck = nil
+        scheduledCheck = next
+        guard let next else { return }
+        let source = DispatchSource.makeTimerSource(queue: .main)
+        let seconds = next.secondsSince1970.rounded(.down)
+        let wall = timespec(tv_sec: Int(seconds), tv_nsec: Int((next.secondsSince1970 - seconds) * 1e9))
+        source.schedule(wallDeadline: DispatchWallTime(timespec: wall), leeway: .milliseconds(500))
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.scheduledCheck = nil
+                self?.send(.clockTicked)
+            }
+        }
+        source.resume()
+        timerCheck = source
+        timerLog.notice("Next timer check at \(next.date, privacy: .public)")
+    }
+
+    /// A wall-clock timer can be late after a sleep or a clock change; check the clock again at once.
+    private func watchClock() {
+        let check: @Sendable (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.send(.clockTicked) }
+        }
+        clockObservers = [
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: check),
+            NotificationCenter.default.addObserver(
+                forName: .NSSystemClockDidChange, object: nil, queue: .main, using: check),
+        ]
     }
 
     private func run(_ effect: Effect) {
@@ -92,7 +143,24 @@ final class AppModel {
         case .disarm: guardian.disarm()
         case .lockScreen: _ = screenLock.lock()
         case .requestNotificationPermission: notifier.requestPermission()
-        case .notify(let reason): notifier.post(title: "Closed lid turned off", body: reason.explanation)
+        case .notify(let reason):
+            if reason == .timer { timerLog.notice("The timer ended; everything is off") }
+            notifier.post(title: reason.notificationTitle, body: reason.explanation)
+        case .warnTimer(let deadline):
+            let time = deadline.date.formatted(date: .omitted, time: .shortened)
+            timerLog.notice("Warning: the timer ends at \(deadline.date, privacy: .public)")
+            notifier.postTimerWarning(
+                title: "Turning off in 5 minutes",
+                body: state.sleepDisabled
+                    ? "Closed lid and Keep awake turn off at \(time)." : "Keep awake turns off at \(time).")
         }
     }
+}
+
+extension Instant {
+    init(_ date: Date) {
+        self.init(secondsSince1970: date.timeIntervalSince1970)
+    }
+
+    var date: Date { Date(timeIntervalSince1970: secondsSince1970) }
 }

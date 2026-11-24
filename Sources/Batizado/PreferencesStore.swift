@@ -15,6 +15,8 @@ struct UserDefaultsPreferences: PreferencesStoring {
         static let keepDisplayOn = "keepDisplayOn"
         static let lockOnLidClose = "lockOnLidClose"
         static let batteryCutoff = "batteryCutoff"
+        static let autoTurnOff = "autoTurnOff"
+        static let timerDeadline = "timerDeadline"
     }
 
     private let defaults = UserDefaults.standard
@@ -26,7 +28,11 @@ struct UserDefaultsPreferences: PreferencesStoring {
             lockOnLidClose: defaults.object(forKey: Key.lockOnLidClose) as? Bool ?? true,
             batteryCutoff: BatteryCutoff.normalized(
                 defaults.object(forKey: Key.batteryCutoff) as? Int ?? BatteryCutoff.standard,
-                testMode: BuildMode.testMode)
+                testMode: BuildMode.testMode),
+            autoTurnOff: AutoTurnOff.normalized(
+                defaults.integer(forKey: Key.autoTurnOff), testMode: BuildMode.testMode),
+            timerDeadline: (defaults.object(forKey: Key.timerDeadline) as? Double).map(
+                Instant.init(secondsSince1970:))
         )
     }
 
@@ -35,5 +41,11 @@ struct UserDefaultsPreferences: PreferencesStoring {
         defaults.set(preferences.keepDisplayOn, forKey: Key.keepDisplayOn)
         defaults.set(preferences.lockOnLidClose, forKey: Key.lockOnLidClose)
         defaults.set(preferences.batteryCutoff, forKey: Key.batteryCutoff)
+        defaults.set(preferences.autoTurnOff.rawValue, forKey: Key.autoTurnOff)
+        if let deadline = preferences.timerDeadline {
+            defaults.set(deadline.secondsSince1970, forKey: Key.timerDeadline)
+        } else {
+            defaults.removeObject(forKey: Key.timerDeadline)
+        }
     }
 }

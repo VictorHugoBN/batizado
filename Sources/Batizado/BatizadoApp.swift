@@ -83,6 +83,7 @@ struct MenuPanel: View {
             .help(
                 "With Closed lid on, locks the screen when the lid closes and no external display is active.")
             BatteryCutoffRow(model: model)
+            AutoTurnOffRow(model: model)
             Divider()
             Button("Remove helper rule") {
                 model.send(.removeHelperRule)
@@ -170,6 +171,70 @@ private struct BatteryCutoffRow: View {
     }
 }
 
+private struct AutoTurnOffRow: View {
+    let model: AppModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "timer")
+                .frame(width: 20)
+                .foregroundStyle(.secondary)
+            Text("Auto turn off")
+            Spacer(minLength: 12)
+            Picker(
+                "Auto turn off",
+                selection: Binding(
+                    get: { model.state.autoTurnOff },
+                    set: { model.send(.setAutoTurnOff($0)) }
+                )
+            ) {
+                ForEach(AutoTurnOff.options(testMode: BuildMode.testMode), id: \.self) { duration in
+                    Text(duration.label).tag(duration)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .help("Turns Keep awake and Closed lid off after this long, with a warning five minutes before.")
+        if let deadline = model.state.timerDeadline?.date {
+            HStack(spacing: 10) {
+                // Text(timerInterval:) redraws itself only while the popover is on screen.
+                (Text("Turns off in ") + Text(timerInterval: Date.now...max(deadline, .now), countsDown: true))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 12)
+                Button("Extend 30 min") {
+                    model.send(.extendTimer)
+                }
+                .controlSize(.small)
+            }
+        }
+    }
+}
+
+extension AutoTurnOff {
+    fileprivate var label: String {
+        switch self {
+        case .never: "Never"
+        case .oneHour: "1 hour"
+        case .twoHours: "2 hours"
+        case .fourHours: "4 hours"
+        case .eightHours: "8 hours"
+        case .test: testLabel
+        }
+    }
+
+    private var testLabel: String {
+        #if DEBUG
+            "5 min 20 s (timer test)"
+        #else
+            "Never"
+        #endif
+    }
+}
+
 extension ShutdownReason {
     var explanation: String {
         switch self {
@@ -179,9 +244,15 @@ extension ShutdownReason {
             "Closed lid and Keep awake were turned off because the battery reached the low battery cutoff."
         case .thermal:
             "Closed lid and Keep awake were turned off because the Mac reported a serious or critical thermal state."
-        case .timer: "Closed lid was turned off because the timer ran out."
+        case .timer: "Keep awake and Closed lid were turned off because the Auto turn off timer ran out."
         case .user, .quit: "Closed lid was turned off."
         }
+    }
+}
+
+extension ShutdownReason {
+    var notificationTitle: String {
+        self == .timer ? "Auto turn off" : "Closed lid turned off"
     }
 }
 

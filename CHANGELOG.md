@@ -25,3 +25,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   50%), the guardian turns Closed lid and Keep awake off and the app notifies and shows why.
 - Add the thermal protection: when macOS reports a serious or critical thermal state, the guardian turns
   Closed lid and Keep awake off and the app notifies; Closed lid stays off while the Mac is that hot.
+- Add "Auto turn off" (Never, 1, 2, 4 or 8 hours): a countdown in the popover, a warning five minutes
+  before with "Extend 30 min", and a deadline that survives a restart; the end turns everything off.

@@ -5,6 +5,12 @@ public enum AppEvent: Equatable, Sendable {
     case setClosedLid(Bool)
     case setLockOnLidClose(Bool)
     case setBatteryCutoff(Int)
+    /// Choosing a duration while the mode is on starts it over from now; Never stops the timer.
+    case setAutoTurnOff(AutoTurnOff)
+    /// The app looked at the clock: at launch, at `nextTimerCheck`, after a wake or a clock change.
+    case clockTicked
+    /// "Extend 30 min", from the warning notification or the popover.
+    case extendTimer
     /// The power source or the battery level changed, or was read at launch; nil without a battery.
     case batteryChanged(BatteryReading?)
     /// The system's thermal state changed, or was read at launch.
@@ -49,11 +55,16 @@ public enum Effect: Hashable, Sendable {
     case requestNotificationPermission
     /// Tell the user why the mode went off, if notifications are allowed; the popover shows it either way.
     case notify(ShutdownReason)
+    /// Post the warning before the timer ends, with the "Extend 30 min" action; never prompts.
+    case warnTimer(deadline: Instant)
 }
 
-public func reduce(_ state: AppState, _ event: AppEvent) -> (state: AppState, effects: [Effect]) {
+/// `now` is the wall clock when the event happened; the core never reads the clock itself.
+public func reduce(_ state: AppState, _ event: AppEvent, at now: Instant) -> (
+    state: AppState, effects: [Effect]
+) {
     var next = state
-    let commands = next.apply(event)
+    let commands = next.apply(event, at: now)
 
     var effects = PowerAssertion.allCases.compactMap { assertion -> Effect? in
         switch (state.assertions.contains(assertion), next.assertions.contains(assertion)) {
