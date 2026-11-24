@@ -49,6 +49,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   result before it deletes the guardian's note, and the guardian keeps its record when it cannot write one.
 - Fix a failed guardian revert being dropped once the Mac cooled down or charged: the decision is stored on
   disk and retried, backing off up to once a minute, until `disablesleep` is off, across guardian restarts.
+- Fix Closed lid staying on with no owner when the app dies while its `disablesleep 1` is still running: the
+  guardian checks again 5 s after cleaning up and turns it off if it appeared.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

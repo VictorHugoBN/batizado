@@ -125,12 +125,21 @@ public enum GuardianEffect: Equatable, Sendable {
     case clearArmed(ArmedRecord)
     case clearPending
     case signalApp
+    /// Call `recheck(afterClearing:)` once, `GuardianTiming.recheckGrace` seconds from now.
+    case recheckAfterGrace(ArmedRecord)
+}
+
+public enum GuardianTiming {
+    /// How long after clearing a dead app's record a `disablesleep 1` it launched may still land.
+    public static let recheckGrace = 5
 }
 
 /// Run at guardian start, when the app's process exits, when the armed record changes, when the power
 /// source or the battery level changes and when the thermal state changes.
 public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
-    if let pending = observation.pending { return carryOut(pending, observation.sleepDisabled) }
+    if let pending = observation.pending {
+        return carryOut(pending, observation.sleepDisabled) + recheck(pending, observation.sleepDisabled)
+    }
     guard let armed = observation.armed else { return [] }
     let reason: ShutdownReason
     if observation.process == armed.app {
@@ -147,6 +156,12 @@ public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
     }
     let pending = PendingRevert(reason: reason, record: armed)
     return [.markPending(pending)] + carryOut(pending, observation.sleepDisabled)
+        + recheck(pending, observation.sleepDisabled)
+}
+
+/// An app that died right after launching `disablesleep 1` leaves it to land after its record is gone.
+private func recheck(_ pending: PendingRevert, _ sleepDisabled: Bool?) -> [GuardianEffect] {
+    pending.reason == .appDied && sleepDisabled != true ? [.recheckAfterGrace(pending.record)] : []
 }
 
 /// Runs the command unless `SleepDisabled` is confirmed 0; an unknown value is reverted too.
@@ -160,4 +175,16 @@ public enum RevertRetry {
     public static func delay(afterFailures failures: Int) -> Int {
         min(60, 1 << min(max(failures, 1), 6))
     }
+}
+
+/// Run once, `GuardianTiming.recheckGrace` after the record of a dead app was cleared with `SleepDisabled`
+/// read 0 or unknown. The mode showing up since, with no newer armed record, is that app's last command.
+public func recheck(afterClearing record: ArmedRecord, _ observation: GuardianObservation)
+    -> [GuardianEffect]
+{
+    guard observation.pending == nil, observation.armed == nil, observation.sleepDisabled != false else {
+        return []
+    }
+    let pending = PendingRevert(reason: .appDied, record: record)
+    return [.markPending(pending)] + carryOut(pending, observation.sleepDisabled)
 }

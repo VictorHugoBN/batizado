@@ -6,13 +6,15 @@ import os
 
 /// Reacts to events only: its own start, a change of the armed record, the exit of the armed app, a change
 /// of the power source or battery level and a change of the thermal state. The only timer is the retry of a
-/// revert that failed, which exists while that revert is pending.
+/// revert that failed, which exists while that revert is pending, and one recheck a few seconds after the
+/// record of a dead app was cleared.
 @MainActor
 final class GuardianService {
     private let shared = SharedState()
     private var watched: (pid: Int32, source: any DispatchSourceProcess)?
     private var thermal: DarwinSubscription?
     private var retry: (any DispatchSourceTimer)?
+    private var graceCheck: (any DispatchSourceTimer)?
     private var failedAttempts = 0
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "guardian")
 
@@ -32,24 +34,27 @@ final class GuardianService {
         reconcile(on: "start")
     }
 
-    private func reconcile(on trigger: String) {
+    private func observe() -> GuardianObservation {
         let armed = shared.readArmed()
-        let battery = PowerSource.reading
-        let thermal = ThermalPressure.state
-        let pending = shared.readPendingRevert()
-        let observation = GuardianObservation(
+        return GuardianObservation(
             armed: armed,
             sleepDisabled: SystemFacts.sleepDisabled,
             process: armed.flatMap { SystemFacts.process($0.app.pid) },
             bootTime: SystemFacts.bootTime,
-            battery: battery,
-            thermal: thermal,
+            battery: PowerSource.reading,
+            thermal: ThermalPressure.state,
             testMode: BuildMode.testMode,
-            pending: pending)
+            pending: shared.readPendingRevert())
+    }
+
+    private func reconcile(on trigger: String) {
+        let observation = observe()
         let effects = BatizadoCore.reconcile(observation)
-        let batteryText = battery.map { "\($0.percent)% on \($0.onAC ? "AC" : "battery")" } ?? "none"
+        let armed = observation.armed
+        let batteryText =
+            observation.battery.map { "\($0.percent)% on \($0.onAC ? "AC" : "battery")" } ?? "none"
         let message =
-            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(thermal?.rawValue ?? "unknown"), pending \(pending.map { $0.reason.rawValue } ?? "none"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
+            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(observation.thermal?.rawValue ?? "unknown"), pending \(observation.pending.map { $0.reason.rawValue } ?? "none"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
         // Battery level changes arrive every few minutes on battery; only the ones that act are worth a notice.
         if trigger == "power source changed",
             effects.allSatisfy({ if case .watchApp = $0 { true } else { false } })
@@ -58,6 +63,19 @@ final class GuardianService {
         } else {
             log.notice("\(message, privacy: .public)")
         }
+        perform(effects)
+    }
+
+    private func recheck(afterClearing record: ArmedRecord) {
+        let observation = observe()
+        let effects = BatizadoCore.recheck(afterClearing: record, observation)
+        log.notice(
+            "Rechecked after clearing pid \(record.app.pid): armed pid \(observation.armed.map { String($0.app.pid) } ?? "none"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
+        )
+        perform(effects)
+    }
+
+    private func perform(_ effects: [GuardianEffect]) {
         for effect in effects where !run(effect) {
             scheduleRetry()
             return
@@ -66,6 +84,21 @@ final class GuardianService {
         cancelRetry()
         // A newer armed record may have waited behind the pending revert.
         reconcile(on: "pending revert done")
+    }
+
+    /// One shot; the dead app's `disablesleep 1` takes well under a second to land if it was on its way.
+    private func scheduleRecheck(afterClearing record: ArmedRecord) {
+        graceCheck?.cancel()
+        let source = DispatchSource.makeTimerSource(queue: .main)
+        source.schedule(deadline: .now() + .seconds(GuardianTiming.recheckGrace))
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.graceCheck = nil
+                self?.recheck(afterClearing: record)
+            }
+        }
+        source.resume()
+        graceCheck = source
     }
 
     /// One shot, longer after each failure; the pending revert on disk survives a restart in between.
@@ -116,6 +149,7 @@ final class GuardianService {
             }
         case .clearArmed(let record): shared.clearArmed(ifStill: record)
         case .signalApp: DarwinNotification.post(SharedState.shutdownRecorded)
+        case .recheckAfterGrace(let record): scheduleRecheck(afterClearing: record)
         }
         return true
     }

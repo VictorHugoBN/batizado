@@ -69,6 +69,8 @@ command fails, it tries again (after 2 s, then 4 s, and so on, at most once a mi
 even if the Mac cools down or gets plugged in meanwhile, and a restarted guardian picks it up.
 
 The guardian only reverts what the app armed: a `disablesleep 1` you set yourself in a terminal is left alone.
+The one exception is the 5 seconds after it cleans up after a crashed app: a `disablesleep 1` that appears then
+is taken for the app's last command, still on its way, and turned off.
 
 ## What gets installed, and why a password is asked once
 

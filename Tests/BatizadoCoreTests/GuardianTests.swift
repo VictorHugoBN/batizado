@@ -59,7 +59,9 @@ private func carriedOut(_ reason: ShutdownReason, runs: Bool = true) -> [Guardia
 }
 
 @Test func aStaleRecordWithSleepAlreadyEnabledIsClearedAndReportedWithoutRunningAnything() {
-    #expect(observe(sleepDisabled: false, running: nil) == decided(.appDied, runs: false))
+    #expect(
+        observe(sleepDisabled: false, running: nil)
+            == decided(.appDied, runs: false) + [.recheckAfterGrace(armed)])
 }
 
 @Test(arguments: [ShutdownReason.battery, .thermal, .timer])
@@ -135,7 +137,8 @@ func aNominalOrFairMacOnlyWatchesTheApp(thermal: ThermalState) {
 }
 
 @Test func anUnreadableSleepDisabledIsNotTakenForZeroAndTheRevertStillRuns() {
-    #expect(observe(sleepDisabled: nil, running: nil) == decided(.appDied))
+    #expect(
+        observe(sleepDisabled: nil, running: nil) == decided(.appDied) + [.recheckAfterGrace(armed)])
 }
 
 @Test func aPendingThermalRevertIsCarriedOutAfterTheMacCooledDown() {
@@ -162,4 +165,37 @@ func aNominalOrFairMacOnlyWatchesTheApp(thermal: ThermalState) {
 
     #expect(
         observe(armed: newer, running: newer.app, pending: pending) == carriedOut(.appDied))
+}
+
+private func recheck(
+    armed record: ArmedRecord? = nil, sleepDisabled: Bool?, pending: PendingRevert? = nil
+) -> [GuardianEffect] {
+    recheck(
+        afterClearing: armed,
+        GuardianObservation(
+            armed: record, sleepDisabled: sleepDisabled, process: nil, bootTime: boot, pending: pending))
+}
+
+@Test func aCloseLidCommandThatLandsAfterTheDeadAppsRecordWasClearedIsReverted() {
+    #expect(recheck(sleepDisabled: true) == decided(.appDied))
+}
+
+@Test func theRecheckLeavesSleepDisabledAloneOnceANewerAppArmed() {
+    let newer = ArmedRecord(app: ProcessIdentity(pid: 5151, startedAt: 9), bootTime: boot, batteryCutoff: 20)
+
+    #expect(recheck(armed: newer, sleepDisabled: true).isEmpty)
+}
+
+@Test func theRecheckFindingSleepStillEnabledDoesNothing() {
+    #expect(recheck(sleepDisabled: false).isEmpty)
+}
+
+@Test func theRecheckIsOnlyScheduledWhenTheDeadAppsCommandCouldStillLand() {
+    #expect(!observe(running: nil).contains(.recheckAfterGrace(armed)))
+    #expect(
+        !observe(sleepDisabled: false, running: nil, bootTime: boot + 86_400).contains(
+            .recheckAfterGrace(armed)))
+    #expect(
+        !observe(sleepDisabled: false, battery: BatteryReading(onAC: false, percent: 5)).contains(
+            .recheckAfterGrace(armed)))
 }
