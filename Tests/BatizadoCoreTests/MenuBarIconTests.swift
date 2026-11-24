@@ -13,7 +13,7 @@ import Testing
 @Test func iconShowsClosedLidWhenTheSystemReportsSleepDisabled() {
     let (state, effects) = reduce(running(keepAwake: true), .sleepDisabledChanged(true))
 
-    #expect(state.sleepDisabled)
+    #expect(state.sleepDisabled == true)
     #expect(state.menuBarIcon == .closedLid)
     #expect(effects.isEmpty)
 }
@@ -23,7 +23,7 @@ import Testing
 
     let (state, _) = reduce(closedLid, .sleepDisabledChanged(false))
 
-    #expect(!state.sleepDisabled)
+    #expect(state.sleepDisabled == false)
     #expect(state.menuBarIcon == .awake)
 }
 

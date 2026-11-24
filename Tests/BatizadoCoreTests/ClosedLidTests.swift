@@ -68,7 +68,9 @@ import Testing
 }
 
 @Test func turningKeepAwakeOffWithoutClosedLidLeavesSleepDisabledAlone() {
-    let (_, effects) = reduce(withRule(running(keepAwake: true)), .setKeepAwake(false))
+    let readZero = reduce(withRule(running(keepAwake: true)), .sleepDisabledChanged(false)).state
+
+    let (_, effects) = reduce(readZero, .setKeepAwake(false))
 
     #expect(!effects.contains(.setSleepDisabled(false)))
 }
@@ -174,4 +176,10 @@ import Testing
     let (state, _) = reduce(removing, .helperRuleRemovalFinished(.failed("denied")))
 
     #expect(state.notice == .removeFailed("denied"))
+}
+
+@Test func turningKeepAwakeOffWithAnUnreadableSleepDisabledTurnsClosedLidOffToBeSafe() {
+    let unknown = reduce(withRule(running(keepAwake: true)), .sleepDisabledChanged(nil)).state
+
+    #expect(reduce(unknown, .setKeepAwake(false)).effects.contains(.setSleepDisabled(false)))
 }

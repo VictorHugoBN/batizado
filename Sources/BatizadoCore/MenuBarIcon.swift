@@ -8,7 +8,7 @@ public enum MenuBarIcon: Equatable, Sendable {
 extension AppState {
     public var menuBarIcon: MenuBarIcon {
         if closedLidDiverged { return .diverged }
-        if sleepDisabled { return .closedLid }
+        if sleepDisabled == true { return .closedLid }
         return keepAwake ? .awake : .off
     }
 }

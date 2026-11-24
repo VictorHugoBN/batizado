@@ -8,7 +8,7 @@ private let armed = ArmedRecord(app: app, bootTime: boot, batteryCutoff: 20)
 
 private func observe(
     armed record: ArmedRecord? = armed,
-    sleepDisabled: Bool = true,
+    sleepDisabled: Bool? = true,
     running: ProcessIdentity? = app,
     bootTime: Int64 = boot,
     battery: BatteryReading? = nil,
@@ -133,4 +133,11 @@ func aNominalOrFairMacOnlyWatchesTheApp(thermal: ThermalState) {
 
 @Test func anAppThatDiedWhileTheMacWasOverheatedIsRecordedAsAppDied() {
     #expect(observe(running: nil, thermal: .serious).contains(.recordShutdown(.appDied)))
+}
+
+@Test func anUnreadableSleepDisabledIsNotTakenForZeroAndTheRevertStillRuns() {
+    #expect(
+        observe(sleepDisabled: nil, running: nil) == [
+            .revertSleepDisabled, .recordShutdown(.appDied), .clearArmed(armed), .signalApp,
+        ])
 }

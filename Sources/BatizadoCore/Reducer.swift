@@ -22,7 +22,8 @@ public enum AppEvent: Equatable, Sendable {
     case helperRuleInstallFinished(AdministratorOutcome)
     case removeHelperRule
     case helperRuleRemovalFinished(AdministratorOutcome)
-    case sleepDisabledChanged(Bool)
+    /// The system's `SleepDisabled` was read; nil when the read failed, which is never taken for 0.
+    case sleepDisabledChanged(Bool?)
     case armingFinished(succeeded: Bool)
     /// One of the two allowed `pmset` commands exited cleanly.
     case sleepDisabledSwitched(Bool)

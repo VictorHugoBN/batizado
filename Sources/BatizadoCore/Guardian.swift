@@ -58,7 +58,8 @@ public struct ArmedRecord: Codable, Equatable, Sendable {
 
 public struct GuardianObservation: Equatable, Sendable {
     public let armed: ArmedRecord?
-    public let sleepDisabled: Bool
+    /// Nil when the system's value could not be read; unknown is never taken for 0.
+    public let sleepDisabled: Bool?
     /// The process that holds the armed record's pid right now, if any.
     public let process: ProcessIdentity?
     public let bootTime: Int64
@@ -70,7 +71,7 @@ public struct GuardianObservation: Equatable, Sendable {
     public let testMode: Bool
 
     public init(
-        armed: ArmedRecord?, sleepDisabled: Bool, process: ProcessIdentity?, bootTime: Int64,
+        armed: ArmedRecord?, sleepDisabled: Bool?, process: ProcessIdentity?, bootTime: Int64,
         battery: BatteryReading? = nil, thermal: ThermalState? = nil, testMode: Bool = false
     ) {
         self.testMode = testMode
@@ -111,6 +112,6 @@ public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
     } else {
         reason = observation.bootTime == armed.bootTime ? .appDied : .reboot
     }
-    let revert: [GuardianEffect] = observation.sleepDisabled ? [.revertSleepDisabled] : []
+    let revert: [GuardianEffect] = observation.sleepDisabled == false ? [] : [.revertSleepDisabled]
     return revert + [.recordShutdown(reason), .clearArmed(armed), .signalApp]
 }

@@ -6,10 +6,11 @@ import os
 
 @MainActor
 protocol SleepDisabledSensing {
-    /// Reports the current value at once, then again every time the system may have changed it.
-    func start(onChange: @escaping @MainActor (Bool) -> Void)
-    /// Reads the value now, without waiting for a change notification.
-    func current() -> Bool
+    /// Reports the current value at once, then again every time the system may have changed it; nil when the
+    /// value could not be read.
+    func start(onChange: @escaping @MainActor (Bool?) -> Void)
+    /// Reads the value now, without waiting for a change notification; nil when it could not be read.
+    func current() -> Bool?
 }
 
 @MainActor
@@ -20,7 +21,7 @@ final class SystemSleepDisabledSensor: SleepDisabledSensing {
     private var token: Int32 = 0
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "sleep-disabled")
 
-    func start(onChange: @escaping @MainActor (Bool) -> Void) {
+    func start(onChange: @escaping @MainActor (Bool?) -> Void) {
         onChange(current())
         let status = notify_register_dispatch(Self.settingsChanged, &token, .main) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -33,7 +34,7 @@ final class SystemSleepDisabledSensor: SleepDisabledSensing {
         }
     }
 
-    func current() -> Bool {
+    func current() -> Bool? {
         SystemFacts.sleepDisabled
     }
 }

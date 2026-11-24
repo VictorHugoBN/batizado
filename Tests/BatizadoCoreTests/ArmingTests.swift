@@ -102,3 +102,13 @@ func aStickyReasonIsShownButNotRestored(reason: ShutdownReason) {
     #expect(!effects.contains(.installHelperRule))
     #expect(!effects.contains(.arm(batteryCutoff: 20)))
 }
+
+@Test func anUnreadableSleepDisabledAfterTurningOffKeepsTheGuardianArmed() {
+    let asked = reduce(closedLidOn(), .setClosedLid(false)).state
+
+    #expect(reduce(asked, .sleepDisabledChanged(nil)).effects.isEmpty)
+}
+
+@Test func anUnreadableSleepDisabledWhileClosedLidIsWantedIsShownAsAMismatch() {
+    #expect(reduce(closedLidOn(), .sleepDisabledChanged(nil)).state.closedLidDiverged)
+}

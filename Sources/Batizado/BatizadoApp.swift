@@ -80,7 +80,7 @@ struct MenuPanel: View {
                 icon: "laptopcomputer",
                 title: "Closed lid",
                 isOn: Binding(
-                    get: { model.state.sleepDisabled },
+                    get: { model.state.sleepDisabled == true },
                     set: { model.send(.setClosedLid($0)) }
                 )
             )
@@ -156,7 +156,12 @@ private struct ClosedLidStatus: View {
             }
             .controlSize(.small)
         }
-        if state.closedLidDiverged {
+        if state.sleepDisabled == nil {
+            PanelNote(
+                text:
+                    "Batizado cannot read the system's sleep setting, so it cannot tell whether Closed lid is active."
+            )
+        } else if state.closedLidDiverged {
             PanelNote(
                 text: state.closedLidRequest == true
                     ? "Closed lid is not active. The Mac will sleep when the lid closes."

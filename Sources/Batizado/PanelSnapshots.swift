@@ -180,9 +180,9 @@
 
     @MainActor
     private final class StandSleepDisabled: SleepDisabledSensing {
-        var value = false
-        func start(onChange: @escaping @MainActor (Bool) -> Void) { onChange(value) }
-        func current() -> Bool { value }
+        var value: Bool? = false
+        func start(onChange: @escaping @MainActor (Bool?) -> Void) { onChange(value) }
+        func current() -> Bool? { value }
     }
 
     @MainActor

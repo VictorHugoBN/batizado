@@ -60,8 +60,9 @@ public enum Notice: Equatable, Sendable {
 public struct AppState: Equatable, Sendable {
     public private(set) var preferences: Preferences
     var isRunning = false
-    /// The system's `SleepDisabled` as last read by a sensor, never what the app asked for.
-    public private(set) var sleepDisabled = false
+    /// The system's `SleepDisabled` as last read by a sensor, never what the app asked for; nil until read and
+    /// when the read failed.
+    public private(set) var sleepDisabled: Bool?
     public private(set) var helperRule = HelperRuleStatus.notInstalled
     /// What the app last asked `disablesleep` to be in this session; nil until it asks.
     public private(set) var closedLidRequest: Bool?
@@ -134,7 +135,7 @@ public struct AppState: Equatable, Sendable {
         case .setKeepAwake(let on):
             preferences.keepAwake = on
             if !on { preferences.closedLid = false }
-            if !on, closedLidRequest == true || sleepDisabled { return setClosedLid(false) }
+            if !on, closedLidRequest == true || sleepDisabled != false { return setClosedLid(false) }
         case .setKeepDisplayOn(let on): preferences.keepDisplayOn = on
         case .setClosedLid(let on):
             let effects = setClosedLid(on)
@@ -160,7 +161,7 @@ public struct AppState: Equatable, Sendable {
         case .thermalChanged(let state): thermal = state
         case .sleepDisabledChanged(let disabled):
             sleepDisabled = disabled
-            if !disabled { return disarmIfOff() }
+            if disabled == false { return disarmIfOff() }
         case .armingFinished(let succeeded): return armingFinished(succeeded: succeeded)
         case .sleepDisabledSwitched(let disabled):
             if !disabled { return disarmIfOff() }
@@ -197,7 +198,7 @@ public struct AppState: Equatable, Sendable {
         case .quit:
             isRunning = false
             awaitingHelperRule = false
-            if let request = closedLidRequest, request || sleepDisabled {
+            if let request = closedLidRequest, request || sleepDisabled != false {
                 closedLidRequest = false
                 return [.setSleepDisabled(false)]
             }
@@ -229,7 +230,7 @@ public struct AppState: Equatable, Sendable {
     /// Locks on the change into unattended only, so a lid already closed when first read is not a closing.
     private func lockIfLeftUnattended(_ before: Bool?) -> [Effect] {
         guard before == false, unattended == true else { return [] }
-        return sleepDisabled && lockOnLidClose ? [.lockScreen] : []
+        return sleepDisabled == true && lockOnLidClose ? [.lockScreen] : []
     }
 
     /// Turning Closed lid on now would only have a protection turn it off again; heat is checked first, as in
@@ -265,7 +266,7 @@ public struct AppState: Equatable, Sendable {
             awaitingHelperRule = true
             return [.installHelperRule]
         }
-        guard on || closedLidRequest == true || sleepDisabled else { return [] }
+        guard on || closedLidRequest == true || sleepDisabled != false else { return [] }
         closedLidRequest = on
         guard on else { return [.setSleepDisabled(false)] }
         preferences.closedLid = true

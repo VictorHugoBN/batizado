@@ -41,6 +41,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   wait for the app to quit and restart the guardian.
 - Change the README to describe what ships: each row, what gets installed and why, the privilege model,
   protections and limitations.
+- Fix a failed read of `SleepDisabled` being taken for 0: the guardian still reverts, the app keeps the
+  guardian armed, and the popover says the value cannot be read.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

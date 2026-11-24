@@ -186,7 +186,7 @@ final class AppModel {
             timerLog.notice("Warning: the timer ends at \(deadline.date, privacy: .public)")
             notifier.postTimerWarning(
                 title: "Turning off in 5 minutes",
-                body: state.sleepDisabled
+                body: state.sleepDisabled == true
                     ? "Closed lid and Keep awake turn off at \(time)." : "Keep awake turns off at \(time).")
         }
     }

@@ -44,7 +44,7 @@ final class GuardianService {
         let effects = BatizadoCore.reconcile(observation)
         let batteryText = battery.map { "\($0.percent)% on \($0.onAC ? "AC" : "battery")" } ?? "none"
         let message =
-            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(thermal?.rawValue ?? "unknown"), SleepDisabled \(observation.sleepDisabled ? 1 : 0), effects \(effects)"
+            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(thermal?.rawValue ?? "unknown"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
         // Battery level changes arrive every few minutes on battery; only the ones that act are worth a notice.
         if trigger == "power source changed",
             effects.allSatisfy({ if case .watchApp = $0 { true } else { false } })
@@ -114,7 +114,7 @@ final class GuardianService {
             log.error("disablesleep 0 failed with status \(exitCode); keeping the armed record")
             return false
         }
-        log.notice("disablesleep 0 ran; SleepDisabled is now \(SystemFacts.sleepDisabled ? 1 : 0)")
+        log.notice("disablesleep 0 ran; SleepDisabled is now \(SystemFacts.sleepDisabled.sleepDisabledText)")
         return true
     }
 }
