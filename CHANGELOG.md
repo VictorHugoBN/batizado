@@ -11,3 +11,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
 
 - Add the repository scaffold: SwiftPM package (core library, menu bar app, guardian), Makefile,
   bundle script with ad-hoc signing, and a placeholder menu bar icon with a Quit button.
+- Add the Keep awake and Keep display on toggles, backed by power assertions and restored on the next
+  launch.
