@@ -12,12 +12,14 @@ private func observe(
     running: ProcessIdentity? = app,
     bootTime: Int64 = boot,
     battery: BatteryReading? = nil,
+    thermal: ThermalState? = nil,
     testMode: Bool = false
 ) -> [GuardianEffect] {
     reconcile(
         GuardianObservation(
             armed: record, sleepDisabled: sleepDisabled, process: running, bootTime: bootTime,
             battery: battery,
+            thermal: thermal,
             testMode: testMode)
     )
 }
@@ -104,4 +106,31 @@ func crashesRestartsAndTheUserAreNotSticky(reason: ShutdownReason) {
 
     #expect(observe(armed: record, battery: full, testMode: true).contains(.recordShutdown(.battery)))
     #expect(observe(armed: record, battery: full, testMode: false) == [.watchApp(pid: 4242)])
+}
+
+@Test(arguments: [ThermalState.serious, .critical])
+func anOverheatedMacWithTheAppAliveRevertsAndRecordsThermal(thermal: ThermalState) {
+    #expect(
+        observe(thermal: thermal) == [
+            .revertSleepDisabled, .recordShutdown(.thermal), .clearArmed(armed), .signalApp,
+        ])
+}
+
+@Test(arguments: [ThermalState.nominal, .fair])
+func aNominalOrFairMacOnlyWatchesTheApp(thermal: ThermalState) {
+    #expect(observe(thermal: thermal) == [.watchApp(pid: 4242)])
+}
+
+@Test func whenTheBatteryAndTheHeatBothFireTheReasonIsThermal() {
+    #expect(
+        observe(battery: BatteryReading(onAC: false, percent: 5), thermal: .critical).contains(
+            .recordShutdown(.thermal)))
+}
+
+@Test func anOverheatedMacWithoutAnArmedRecordIsLeftAlone() {
+    #expect(observe(armed: nil, thermal: .critical).isEmpty)
+}
+
+@Test func anAppThatDiedWhileTheMacWasOverheatedIsRecordedAsAppDied() {
+    #expect(observe(running: nil, thermal: .serious).contains(.recordShutdown(.appDied)))
 }

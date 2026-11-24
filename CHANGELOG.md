@@ -23,3 +23,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   locks the screen.
 - Add the low battery protection: on battery at or below the "Low battery cutoff" (20% by default, 5% to
   50%), the guardian turns Closed lid and Keep awake off and the app notifies and shows why.
+- Add the thermal protection: when macOS reports a serious or critical thermal state, the guardian turns
+  Closed lid and Keep awake off and the app notifies; Closed lid stays off while the Mac is that hot.

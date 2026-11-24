@@ -16,6 +16,8 @@ final class AppModel {
     private let notifier: any Notifying
     // Held so its notification handler, which only weakly captures it, keeps firing.
     private let battery: any BatterySensing
+    // Held because its notification registrations end when it is released.
+    private let thermal: any ThermalSensing
     // Held for the same reason: their C callbacks point at them and stop only when they are released.
     private let lid: any LidSensing
     private let displays: any ExternalDisplaySensing
@@ -31,6 +33,7 @@ final class AppModel {
         displays: any ExternalDisplaySensing = SystemExternalDisplaySensor(),
         screenLock: any ScreenLocking = systemScreenLock(),
         battery: any BatterySensing = SystemBatterySensor(),
+        thermal: any ThermalSensing = SystemThermalSensor(),
         notifier: any Notifying = UserNotifier()
     ) {
         self.assertions = assertions
@@ -42,6 +45,7 @@ final class AppModel {
         self.screenLock = screenLock
         self.notifier = notifier
         self.battery = battery
+        self.thermal = thermal
         self.lid = lid
         self.displays = displays
         state = AppState(preferences: preferences.load())
@@ -49,8 +53,9 @@ final class AppModel {
         send(.helperRuleChecked(installed: helperRule.isInstalled()))
         sleepDisabled.start { [weak self] in self?.send(.sleepDisabledChanged($0)) }
         helperRule.watch { [weak self] in self?.send(.helperRuleChecked(installed: $0)) }
-        // Before the shutdown reason, so restoring Closed lid after a crash sees the battery level.
+        // Before the shutdown reason, so restoring Closed lid after a crash sees the battery and the heat.
         battery.start { [weak self] in self?.send(.batteryChanged($0)) }
+        thermal.start { [weak self] in self?.send(.thermalChanged($0)) }
         guardian.installAgent()
         guardian.watchShutdowns { [weak self] in self?.send(.shutdownRecorded($0)) }
         displays.start { [weak self] in self?.send(.externalDisplayChanged(active: $0)) }

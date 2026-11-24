@@ -97,3 +97,28 @@ public enum DarwinNotification {
         }
     }
 }
+
+/// Notify(3) registrations that end when this is released; the owner stores it for as long as it listens.
+public final class DarwinSubscription: Sendable {
+    private let tokens: [Int32]
+
+    @MainActor
+    public init(_ names: [String], handler: @escaping @MainActor () -> Void) {
+        tokens = names.compactMap { name in
+            var token: Int32 = 0
+            let status = notify_register_dispatch(name, &token, .main) { _ in
+                MainActor.assumeIsolated { handler() }
+            }
+            guard status == NOTIFY_STATUS_OK else {
+                Logger(subsystem: AppInfo.bundleIdentifier, category: "shared-state").error(
+                    "Could not observe \(name, privacy: .public): \(status)")
+                return nil
+            }
+            return token
+        }
+    }
+
+    deinit {
+        for token in tokens { notify_cancel(token) }
+    }
+}

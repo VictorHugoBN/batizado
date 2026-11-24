@@ -4,12 +4,13 @@ import Darwin
 import Dispatch
 import os
 
-/// Reacts to events only: its own start, a change of the armed record, the exit of the armed app and a change
-/// of the power source or battery level. There is no timer.
+/// Reacts to events only: its own start, a change of the armed record, the exit of the armed app, a change
+/// of the power source or battery level and a change of the thermal state. There is no timer.
 @MainActor
 final class GuardianService {
     private let shared = SharedState()
     private var watched: (pid: Int32, source: any DispatchSourceProcess)?
+    private var thermal: DarwinSubscription?
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "guardian")
 
     func start() {
@@ -20,24 +21,30 @@ final class GuardianService {
         PowerSource.observe { [weak self] in
             self?.reconcile(on: "power source changed")
         }
+        thermal = ThermalPressure.observe { [weak self] in
+            self?.reconcile(on: "thermal state changed")
+        }
         if BuildMode.testMode { log.notice("Debug build: the low battery test mode is available") }
+        if BuildMode.testMode { log.notice("Debug build: the thermal test mode is available") }
         reconcile(on: "start")
     }
 
     private func reconcile(on trigger: String) {
         let armed = shared.readArmed()
         let battery = PowerSource.reading
+        let thermal = ThermalPressure.state
         let observation = GuardianObservation(
             armed: armed,
             sleepDisabled: SystemFacts.sleepDisabled,
             process: armed.flatMap { SystemFacts.process($0.app.pid) },
             bootTime: SystemFacts.bootTime,
             battery: battery,
+            thermal: thermal,
             testMode: BuildMode.testMode)
         let effects = BatizadoCore.reconcile(observation)
         let batteryText = battery.map { "\($0.percent)% on \($0.onAC ? "AC" : "battery")" } ?? "none"
         let message =
-            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), SleepDisabled \(observation.sleepDisabled ? 1 : 0), effects \(effects)"
+            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(thermal?.rawValue ?? "unknown"), SleepDisabled \(observation.sleepDisabled ? 1 : 0), effects \(effects)"
         // Battery level changes arrive every few minutes on battery; only the ones that act are worth a notice.
         if trigger == "power source changed",
             effects.allSatisfy({ if case .watchApp = $0 { true } else { false } })

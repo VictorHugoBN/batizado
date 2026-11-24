@@ -7,6 +7,8 @@ public enum AppEvent: Equatable, Sendable {
     case setBatteryCutoff(Int)
     /// The power source or the battery level changed, or was read at launch; nil without a battery.
     case batteryChanged(BatteryReading?)
+    /// The system's thermal state changed, or was read at launch.
+    case thermalChanged(ThermalState)
     case helperRuleChecked(installed: Bool)
     case reinstallHelperRule
     case helperRuleInstallFinished(AdministratorOutcome)

@@ -41,6 +41,8 @@ public enum Notice: Equatable, Sendable {
     case armFailed
     /// Closed lid stayed off because the low battery protection would turn it off at once.
     case batteryLow(percent: Int, cutoff: Int)
+    /// Closed lid stayed off because the thermal protection would turn it off at once.
+    case overheated(ThermalState)
 }
 
 public struct AppState: Equatable, Sendable {
@@ -62,6 +64,8 @@ public struct AppState: Equatable, Sendable {
     var externalDisplay = false
     /// Nil until the power source is first read, and on a Mac without a battery.
     public private(set) var battery: BatteryReading?
+    /// Nil until the thermal state is first read.
+    public private(set) var thermal: ThermalState?
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -99,6 +103,7 @@ public struct AppState: Equatable, Sendable {
             preferences.batteryCutoff = cutoff
             return armed ? [.updateArmed(batteryCutoff: cutoff)] : []
         case .batteryChanged(let reading): battery = reading
+        case .thermalChanged(let state): thermal = state
         case .sleepDisabledChanged(let disabled):
             sleepDisabled = disabled
             if !disabled { return disarmIfOff() }
@@ -157,8 +162,10 @@ public struct AppState: Equatable, Sendable {
         return sleepDisabled && lockOnLidClose ? [.lockScreen] : []
     }
 
-    /// Turning Closed lid on now would only have the low battery protection turn it off again.
+    /// Turning Closed lid on now would only have a protection turn it off again; heat is checked first, as in
+    /// the guardian.
     private var closedLidRefusal: Notice? {
+        if let thermal, thermal.isOverheated { return .overheated(thermal) }
         guard let battery, battery.reachesCutoff(batteryCutoff) else { return nil }
         return .batteryLow(percent: battery.percent, cutoff: batteryCutoff)
     }

@@ -64,14 +64,17 @@ public struct GuardianObservation: Equatable, Sendable {
     public let bootTime: Int64
     /// Nil on a Mac without a battery.
     public let battery: BatteryReading?
+    /// Nil when the system's thermal state could not be read.
+    public let thermal: ThermalState?
     /// Debug builds honor the test cutoff; a release guardian clamps it to the normal options.
     public let testMode: Bool
 
     public init(
         armed: ArmedRecord?, sleepDisabled: Bool, process: ProcessIdentity?, bootTime: Int64,
-        battery: BatteryReading? = nil, testMode: Bool = false
+        battery: BatteryReading? = nil, thermal: ThermalState? = nil, testMode: Bool = false
     ) {
         self.testMode = testMode
+        self.thermal = thermal
         self.armed = armed
         self.sleepDisabled = sleepDisabled
         self.process = process
@@ -91,17 +94,20 @@ public enum GuardianEffect: Equatable, Sendable {
     case signalApp
 }
 
-/// Run at guardian start, when the app's process exits, when the armed record changes and when the power
-/// source or the battery level changes.
+/// Run at guardian start, when the app's process exits, when the armed record changes, when the power
+/// source or the battery level changes and when the thermal state changes.
 public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
     guard let armed = observation.armed else { return [] }
     let reason: ShutdownReason
     if observation.process == armed.app {
         let cutoff = BatteryCutoff.normalized(armed.batteryCutoff, testMode: observation.testMode)
-        guard observation.battery?.reachesCutoff(cutoff) == true else {
+        if observation.thermal?.isOverheated == true {
+            reason = .thermal
+        } else if observation.battery?.reachesCutoff(cutoff) == true {
+            reason = .battery
+        } else {
             return [.watchApp(pid: armed.app.pid)]
         }
-        reason = .battery
     } else {
         reason = observation.bootTime == armed.bootTime ? .appDied : .reboot
     }

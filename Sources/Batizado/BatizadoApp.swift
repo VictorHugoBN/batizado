@@ -122,6 +122,10 @@ private struct ClosedLidStatus: View {
             warning(
                 "Closed lid stayed off: the battery is at \(percent)%, at or below the \(cutoff)% cutoff. Plug in the charger or lower the cutoff."
             )
+        case .overheated(let thermal):
+            warning(
+                "Closed lid stayed off: the Mac reports a \(thermal.rawValue) thermal state. Let it cool down and try again."
+            )
         case nil: EmptyView()
         }
         if let reason = state.lastShutdown {
@@ -173,7 +177,8 @@ extension ShutdownReason {
         case .reboot: "Closed lid was turned off because the Mac restarted with it on."
         case .battery:
             "Closed lid and Keep awake were turned off because the battery reached the low battery cutoff."
-        case .thermal: "Closed lid was turned off because the Mac got too hot."
+        case .thermal:
+            "Closed lid and Keep awake were turned off because the Mac reported a serious or critical thermal state."
         case .timer: "Closed lid was turned off because the timer ran out."
         case .user, .quit: "Closed lid was turned off."
         }
