@@ -5,12 +5,29 @@ import SwiftUI
 import os
 
 @main
+enum Launch {
+    @MainActor static func main() {
+        #if DEBUG
+            // Debug only: draws the popover and the icons to PNGs and exits before any sensor starts.
+            if let directory = PanelSnapshots.requestedDirectory() {
+                PanelSnapshots.write(to: directory)
+                exit(0)
+            }
+        #endif
+        BatizadoApp.main()
+    }
+}
+
 struct BatizadoApp: App {
     @NSApplicationDelegateAdaptor private var delegate: AppDelegate
 
     var body: some Scene {
-        MenuBarExtra(AppInfo.name, systemImage: delegate.model.state.menuBarIcon.symbolName) {
+        MenuBarExtra {
             MenuPanel(model: delegate.model)
+        } label: {
+            let icon = delegate.model.state.menuBarIcon
+            Image(nsImage: icon.image)
+                .accessibilityLabel(icon.accessibilityLabel)
         }
         .menuBarExtraStyle(.window)
     }
@@ -42,17 +59,23 @@ struct MenuPanel: View {
     let model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(AppInfo.name)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "cup.and.saucer.fill")
+                    .foregroundStyle(Palette.accent)
+                Text(AppInfo.name)
+                    .font(.headline)
+            }
+            .padding(.bottom, 2)
             ToggleRow(
-                icon: "cup.and.saucer.fill",
+                icon: "cup.and.heat.waves",
                 title: "Keep awake",
                 isOn: Binding(
                     get: { model.state.keepAwake },
                     set: { model.send(.setKeepAwake($0)) }
                 )
             )
+            .help("Keeps the Mac from sleeping while the lid is open.")
             ToggleRow(
                 icon: "laptopcomputer",
                 title: "Closed lid",
@@ -61,7 +84,8 @@ struct MenuPanel: View {
                     set: { model.send(.setClosedLid($0)) }
                 )
             )
-            .help("Keeps the Mac awake with the lid closed. Shows the system's real SleepDisabled setting.")
+            .help(
+                "Keeps the Mac awake with the lid closed. The switch shows the system's real sleep setting.")
             ClosedLidStatus(model: model)
             ToggleRow(
                 icon: "display",
@@ -72,6 +96,7 @@ struct MenuPanel: View {
                 )
             )
             .disabled(!model.state.keepAwake)
+            .help("Keeps the display from sleeping while Keep awake is on.")
             ToggleRow(
                 icon: "lock.laptopcomputer",
                 title: "Lock on lid close",
@@ -95,19 +120,26 @@ struct MenuPanel: View {
             .disabled(!model.launchAtLoginAvailable)
             .help(
                 model.launchAtLoginAvailable
-                    ? "Opens Batizado when you log in, with a plain agent in ~/Library/LaunchAgents."
-                    : "Move Batizado to a folder such as Applications and open it from there first.")
+                    ? "Opens Batizado when you log in, using a login agent in ~/Library/LaunchAgents."
+                    : "Move Batizado to the Applications folder and open it from there first.")
             Divider()
-            Button("Remove helper rule") {
+            ActionRow(icon: "heart", title: "Sponsor", opensLink: true) {
+                if let url = URL(string: AppInfo.sponsorURL) { NSWorkspace.shared.open(url) }
+            }
+            .help("Opens the GitHub Sponsors page for Batizado in your browser.")
+            ActionRow(icon: "trash", title: "Remove helper rule") {
                 model.send(.removeHelperRule)
             }
             .disabled(model.state.helperRule != .installed)
-            Button("Quit") {
+            .help(
+                "Turns Closed lid off and removes the helper rule. macOS asks for an administrator password.")
+            ActionRow(icon: "xmark.circle", title: "Quit") {
                 NSApplication.shared.terminate(nil)
             }
         }
         .padding(16)
-        .frame(width: 260)
+        .frame(width: 300)
+        .tint(Palette.accent)
         .onAppear { model.refreshLaunchAtLogin() }
     }
 }
@@ -118,45 +150,43 @@ private struct ClosedLidStatus: View {
     var body: some View {
         let state = model.state
         if state.helperRule == .missing {
-            warning("The helper rule was removed. Closed lid cannot change until you reinstall it.")
+            PanelNote(text: "The helper rule was removed. Closed lid cannot change until you reinstall it.")
             Button("Reinstall helper rule") {
                 model.send(.reinstallHelperRule)
             }
+            .controlSize(.small)
         }
         if state.closedLidDiverged {
-            warning(
-                state.closedLidRequest == true
+            PanelNote(
+                text: state.closedLidRequest == true
                     ? "Closed lid is not active. The Mac will sleep when the lid closes."
-                    : "Sleep is still disabled. The Mac will stay awake with the lid closed.")
+                    : "Closed lid is still active. The Mac will stay awake with the lid closed.")
         }
-        switch state.notice {
-        case .installFailed(let message): warning("Could not install the helper rule: \(message)")
-        case .removeFailed(let message): warning("Could not remove the helper rule: \(message)")
-        case .armFailed: warning("Closed lid stayed off: the guardian could not be armed.")
-        case .batteryLow(let percent, let cutoff):
-            warning(
-                "Closed lid stayed off: the battery is at \(percent)%, at or below the \(cutoff)% cutoff. Plug in the charger or lower the cutoff."
-            )
-        case .overheated(let thermal):
-            warning(
-                "Closed lid stayed off: the Mac reports a \(thermal.rawValue) thermal state. Let it cool down and try again."
-            )
-        case .notRestored:
-            warning(
-                "Closed lid was left on but not turned back on: the helper rule is not installed. Turn Closed lid on to install it."
-            )
-        case nil: EmptyView()
+        if let text = state.notice?.text {
+            PanelNote(text: text)
         }
         if let reason = state.lastShutdown {
-            warning(reason.explanation + (state.closedLidRequest == true ? " It was turned back on." : ""))
+            PanelNote(
+                text: reason.explanation + (state.closedLidRequest == true ? " It was turned back on." : ""),
+                isWarning: false)
         }
     }
+}
 
-    private func warning(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.orange)
-            .fixedSize(horizontal: false, vertical: true)
+extension Notice {
+    fileprivate var text: String {
+        switch self {
+        case .installFailed(let message): "Could not install the helper rule: \(message)"
+        case .removeFailed(let message): "Could not remove the helper rule: \(message)"
+        case .armFailed:
+            "Closed lid stayed off: Batizado could not set up the guardian that turns it off if the app stops."
+        case .batteryLow(let percent, let cutoff):
+            "Closed lid stayed off: the battery is at \(percent)%, at or below the \(cutoff)% Low battery cutoff. Plug in the charger or lower the cutoff."
+        case .overheated(let thermal):
+            "Closed lid stayed off: the Mac is too hot (\(thermal.rawValue) thermal state). Let it cool down and try again."
+        case .notRestored:
+            "Closed lid was on when Batizado quit, but it was not turned back on because the helper rule is not installed. Turn Closed lid on to install it."
+        }
     }
 }
 
@@ -165,10 +195,8 @@ private struct BatteryCutoffRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "battery.25percent")
-                .frame(width: 20)
-                .foregroundStyle(.secondary)
-            Text("Low battery cutoff")
+            Label("Low battery cutoff", systemImage: "battery.25percent")
+                .labelStyle(RowLabelStyle())
             Spacer(minLength: 12)
             Picker(
                 "Low battery cutoff",
@@ -183,9 +211,9 @@ private struct BatteryCutoffRow: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .fixedSize()
+            .frame(width: 88)
         }
-        .help("On battery, turns Closed lid and Keep awake off at or below this level. Never on the charger.")
+        .help("On battery, turns Closed lid and Keep awake off at or below this level. Never while charging.")
     }
 }
 
@@ -194,10 +222,8 @@ private struct AutoTurnOffRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "timer")
-                .frame(width: 20)
-                .foregroundStyle(.secondary)
-            Text("Auto turn off")
+            Label("Auto turn off", systemImage: "timer")
+                .labelStyle(RowLabelStyle())
             Spacer(minLength: 12)
             Picker(
                 "Auto turn off",
@@ -212,7 +238,7 @@ private struct AutoTurnOffRow: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .fixedSize()
+            .frame(width: 88)
         }
         .help("Turns Keep awake and Closed lid off after this long, with a warning five minutes before.")
         if let deadline = model.state.timerDeadline?.date {
@@ -222,6 +248,7 @@ private struct AutoTurnOffRow: View {
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+                    .padding(.leading, 30)
                 Spacer(minLength: 12)
                 Button("Extend 30 min") {
                     model.send(.extendTimer)
@@ -259,10 +286,10 @@ extension ShutdownReason {
         case .appDied: "Closed lid was turned off because Batizado stopped unexpectedly."
         case .reboot: "Closed lid was turned off because the Mac restarted with it on."
         case .battery:
-            "Closed lid and Keep awake were turned off because the battery reached the low battery cutoff."
+            "Closed lid and Keep awake were turned off because the battery reached the Low battery cutoff."
         case .thermal:
-            "Closed lid and Keep awake were turned off because the Mac reported a serious or critical thermal state."
-        case .timer: "Keep awake and Closed lid were turned off because the Auto turn off timer ran out."
+            "Closed lid and Keep awake were turned off because the Mac got too hot (serious or critical thermal state)."
+        case .timer: "The Auto turn off timer ran out, so Keep awake and Closed lid are now off."
         case .user, .quit: "Closed lid was turned off."
         }
     }
@@ -271,16 +298,5 @@ extension ShutdownReason {
 extension ShutdownReason {
     var notificationTitle: String {
         self == .timer ? "Auto turn off" : "Closed lid turned off"
-    }
-}
-
-extension MenuBarIcon {
-    fileprivate var symbolName: String {
-        switch self {
-        case .off: "cup.and.saucer"
-        case .awake: "cup.and.saucer.fill"
-        case .closedLid: "cup.and.heat.waves.fill"
-        case .diverged: "exclamationmark.triangle.fill"
-        }
     }
 }

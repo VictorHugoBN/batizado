@@ -31,3 +31,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   app when it moves, and is removed when the toggle goes off.
 - Change the launch restore: Keep awake and Closed lid come back after Quit, a crash or a restart, but not
   after a protection, the timer or turning them off; a restore that cannot run says why.
+- Change the look: coffee-toned rows and switches for light and dark mode, four menu bar cup icons (off,
+  awake, closed lid, mismatch), clearer wording throughout, and a "Sponsor" row.

@@ -36,7 +36,7 @@ final class SystemHelperRule: HelperRuleManaging {
         guard confirm(for: rule) else { return .cancelled }
         let outcome = runAsAdministrator(
             rule.installScript,
-            prompt: "Batizado wants to install a rule that lets it turn sleep on and off with the lid closed."
+            prompt: "Batizado wants to install its helper rule so Closed lid can turn sleep off and on."
         )
         if outcome == .succeeded, !isInstalled() {
             return .failed("The rule was not found at \(HelperRule.path) after installing it.")
@@ -76,7 +76,7 @@ final class SystemHelperRule: HelperRuleManaging {
 
             \(HelperRule.commands.joined(separator: "\n"))
 
-            Nothing else runs as root. macOS asks for an administrator password once. You can remove the \
+            Nothing else runs as root. macOS will ask for an administrator password once. You can remove the \
             rule at any time with "Remove helper rule".
             """
         alert.addButton(withTitle: "Continue")

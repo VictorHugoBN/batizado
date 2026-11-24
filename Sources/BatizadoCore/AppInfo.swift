@@ -6,4 +6,6 @@ public enum AppInfo {
     public static let bundleIdentifier = "io.github.victorhugobn.batizado"
     public static let guardianIdentifier = bundleIdentifier + ".guardian"
     public static let loginIdentifier = bundleIdentifier + ".login"
+    /// The "Sponsor" row opens this; `.github/FUNDING.yml` names the same account.
+    public static let sponsorURL = "https://github.com/sponsors/VictorHugoBN"
 }
