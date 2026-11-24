@@ -13,26 +13,26 @@ final class SystemExternalDisplaySensor: ExternalDisplaySensing {
     private var onChange: (@MainActor (Bool) -> Void)?
     private var last: Bool?
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "displays")
+    private var registered = false
+    // The callback holds this box, not self, so it can never reach a released sensor.
+    private lazy var refcon = Unmanaged.passRetained(WeakSensor(self)).toOpaque()
+
+    isolated deinit {
+        guard registered else { return }
+        CGDisplayRemoveReconfigurationCallback(displaysReconfigured, refcon)
+        Unmanaged<WeakSensor>.fromOpaque(refcon).release()
+    }
 
     func start(onChange: @escaping @MainActor (Bool) -> Void) {
         self.onChange = onChange
         report()
-        let status = CGDisplayRegisterReconfigurationCallback(
-            { _, flags, refcon in
-                // The list is only settled once the reconfiguration has finished.
-                guard let refcon, !flags.contains(.beginConfigurationFlag) else { return }
-                let sensor = Unmanaged<SystemExternalDisplaySensor>.fromOpaque(refcon)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated { sensor.takeUnretainedValue().report() }
-                }
-            },
-            Unmanaged.passUnretained(self).toOpaque())
-        if status != .success {
-            log.error("Could not observe display changes: \(status.rawValue)")
+        registered = CGDisplayRegisterReconfigurationCallback(displaysReconfigured, refcon) == .success
+        if !registered {
+            log.error("Could not observe display changes")
         }
     }
 
-    private func report() {
+    fileprivate func report() {
         let active = Self.externalDisplayActive()
         guard active != last else { return }
         last = active
@@ -46,5 +46,21 @@ final class SystemExternalDisplaySensor: ExternalDisplaySensing {
         var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
         guard CGGetActiveDisplayList(count, &displays, &count) == .success else { return false }
         return displays.prefix(Int(count)).contains { CGDisplayIsBuiltin($0) == 0 }
+    }
+}
+
+private final class WeakSensor: @unchecked Sendable {
+    weak var sensor: SystemExternalDisplaySensor?
+    init(_ sensor: SystemExternalDisplaySensor) { self.sensor = sensor }
+}
+
+private func displaysReconfigured(
+    _ display: CGDirectDisplayID, _ flags: CGDisplayChangeSummaryFlags, _ refcon: UnsafeMutableRawPointer?
+) {
+    // The list is only settled once the reconfiguration has finished.
+    guard let refcon, !flags.contains(.beginConfigurationFlag) else { return }
+    let box = Unmanaged<WeakSensor>.fromOpaque(refcon).takeUnretainedValue()
+    DispatchQueue.main.async {
+        MainActor.assumeIsolated { box.sensor?.report() }
     }
 }

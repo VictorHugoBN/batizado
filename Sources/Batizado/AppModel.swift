@@ -16,6 +16,9 @@ final class AppModel {
     private let notifier: any Notifying
     // Held so its notification handler, which only weakly captures it, keeps firing.
     private let battery: any BatterySensing
+    // Held for the same reason: their C callbacks point at them and stop only when they are released.
+    private let lid: any LidSensing
+    private let displays: any ExternalDisplaySensing
 
     init(
         assertions: any PowerAssertionHolding = SystemPowerAssertions(),
@@ -39,6 +42,8 @@ final class AppModel {
         self.screenLock = screenLock
         self.notifier = notifier
         self.battery = battery
+        self.lid = lid
+        self.displays = displays
         state = AppState(preferences: preferences.load())
         send(.launched)
         send(.helperRuleChecked(installed: helperRule.isInstalled()))

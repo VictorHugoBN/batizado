@@ -17,6 +17,12 @@ final class SystemLidSensor: LidSensing {
     private var last: Bool?
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "lid")
 
+    // The callback gets an unretained self, so it must be gone before self is.
+    isolated deinit {
+        if notifier != IO_OBJECT_NULL { IOObjectRelease(notifier) }
+        if let port { IONotificationPortDestroy(port) }
+    }
+
     func start(onChange: @escaping @MainActor (Bool) -> Void) {
         self.onChange = onChange
         report()
