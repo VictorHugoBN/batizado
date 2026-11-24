@@ -5,6 +5,8 @@ public enum PowerAssertion: Hashable, Sendable, CaseIterable {
 
 public struct Preferences: Hashable, Sendable {
     public var keepAwake: Bool
+    /// The user left Closed lid on: kept by Quit and a crash, cleared by turning it off and by a sticky reason.
+    public var closedLid: Bool
     public var keepDisplayOn: Bool
     public var lockOnLidClose: Bool
     public var batteryCutoff: Int
@@ -13,11 +15,13 @@ public struct Preferences: Hashable, Sendable {
     public var timerDeadline: Instant?
 
     public init(
-        keepAwake: Bool = false, keepDisplayOn: Bool = false, lockOnLidClose: Bool = true,
+        keepAwake: Bool = false, closedLid: Bool = false, keepDisplayOn: Bool = false,
+        lockOnLidClose: Bool = true,
         batteryCutoff: Int = BatteryCutoff.standard, autoTurnOff: AutoTurnOff = .never,
         timerDeadline: Instant? = nil
     ) {
         self.keepAwake = keepAwake
+        self.closedLid = closedLid
         self.keepDisplayOn = keepDisplayOn
         self.lockOnLidClose = lockOnLidClose
         self.batteryCutoff = batteryCutoff
@@ -49,6 +53,8 @@ public enum Notice: Equatable, Sendable {
     case batteryLow(percent: Int, cutoff: Int)
     /// Closed lid stayed off because the thermal protection would turn it off at once.
     case overheated(ThermalState)
+    /// Closed lid was left on but not turned back on at launch: the helper rule is not installed.
+    case notRestored
 }
 
 public struct AppState: Equatable, Sendable {
@@ -74,6 +80,8 @@ public struct AppState: Equatable, Sendable {
     public private(set) var thermal: ThermalState?
     /// The deadline the warning was posted for, so an extended deadline is warned about again.
     var warnedDeadline: Instant?
+    /// The launch restore has run, so a later crash or restart report re-applies the user's intention.
+    var restored = false
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -125,6 +133,7 @@ public struct AppState: Equatable, Sendable {
         case .launched: isRunning = true
         case .setKeepAwake(let on):
             preferences.keepAwake = on
+            if !on { preferences.closedLid = false }
             if !on, closedLidRequest == true || sleepDisabled { return setClosedLid(false) }
         case .setKeepDisplayOn(let on): preferences.keepDisplayOn = on
         case .setClosedLid(let on):
@@ -136,6 +145,9 @@ public struct AppState: Equatable, Sendable {
             preferences.autoTurnOff = duration
             preferences.timerDeadline = keepAwake ? duration.deadline(from: now) : nil
             return duration == .never ? [] : [.requestNotificationPermission]
+        case .restore:
+            restored = true
+            return restoreClosedLid()
         case .clockTicked: return checkTimer(at: now)
         case .extendTimer:
             guard let deadline = timerDeadline else { return [] }
@@ -157,8 +169,8 @@ public struct AppState: Equatable, Sendable {
             // The timer already ended at launch; the crash before it must not turn the mode back on.
             if lastShutdown?.isSticky == true { return [] }
             lastShutdown = reason
-            guard helperRule == .installed, closedLidRequest != true else { return [] }
-            return setClosedLid(true)
+            // A late report means the guardian may have reverted after the restore; put the intention back.
+            return restored ? restoreClosedLid() : []
         case .lidChanged(let closed):
             let before = unattended
             lidClosed = closed
@@ -228,9 +240,23 @@ public struct AppState: Equatable, Sendable {
         return .batteryLow(percent: battery.percent, cutoff: batteryCutoff)
     }
 
+    /// Re-applies the Closed lid the user left on; one that cannot go on now is dropped and explained, and the
+    /// password window never opens for it.
+    private mutating func restoreClosedLid() -> [Effect] {
+        guard preferences.closedLid else { return [] }
+        guard helperRule == .installed else {
+            preferences.closedLid = false
+            notice = .notRestored
+            return []
+        }
+        return setClosedLid(true)
+    }
+
     private mutating func setClosedLid(_ on: Bool) -> [Effect] {
         notice = nil
+        if !on { preferences.closedLid = false }
         if on, let refusal = closedLidRefusal {
+            preferences.closedLid = false
             notice = refusal
             return []
         }
@@ -242,13 +268,17 @@ public struct AppState: Equatable, Sendable {
         guard on || closedLidRequest == true || sleepDisabled else { return [] }
         closedLidRequest = on
         guard on else { return [.setSleepDisabled(false)] }
+        preferences.closedLid = true
         preferences.keepAwake = true
         return armed ? [.setSleepDisabled(true)] : [.arm(batteryCutoff: batteryCutoff)]
     }
 
     private mutating func armingFinished(succeeded: Bool) -> [Effect] {
         guard succeeded else {
-            if closedLidRequest == true { closedLidRequest = nil }
+            if closedLidRequest == true {
+                closedLidRequest = nil
+                preferences.closedLid = false
+            }
             notice = .armFailed
             return []
         }

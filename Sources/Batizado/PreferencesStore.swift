@@ -12,6 +12,7 @@ protocol PreferencesStoring {
 struct UserDefaultsPreferences: PreferencesStoring {
     private enum Key {
         static let keepAwake = "keepAwake"
+        static let closedLid = "closedLid"
         static let keepDisplayOn = "keepDisplayOn"
         static let lockOnLidClose = "lockOnLidClose"
         static let batteryCutoff = "batteryCutoff"
@@ -24,6 +25,7 @@ struct UserDefaultsPreferences: PreferencesStoring {
     func load() -> Preferences {
         Preferences(
             keepAwake: defaults.bool(forKey: Key.keepAwake),
+            closedLid: defaults.bool(forKey: Key.closedLid),
             keepDisplayOn: defaults.bool(forKey: Key.keepDisplayOn),
             lockOnLidClose: defaults.object(forKey: Key.lockOnLidClose) as? Bool ?? true,
             batteryCutoff: BatteryCutoff.normalized(
@@ -38,6 +40,7 @@ struct UserDefaultsPreferences: PreferencesStoring {
 
     func save(_ preferences: Preferences) {
         defaults.set(preferences.keepAwake, forKey: Key.keepAwake)
+        defaults.set(preferences.closedLid, forKey: Key.closedLid)
         defaults.set(preferences.keepDisplayOn, forKey: Key.keepDisplayOn)
         defaults.set(preferences.lockOnLidClose, forKey: Key.lockOnLidClose)
         defaults.set(preferences.batteryCutoff, forKey: Key.batteryCutoff)

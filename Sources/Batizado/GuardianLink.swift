@@ -16,8 +16,6 @@ protocol GuardianLinking {
 
 @MainActor
 final class SystemGuardianLink: GuardianLinking {
-    private static let launchctl = URL(fileURLWithPath: "/bin/launchctl")
-
     private let shared = SharedState()
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "guardian-link")
 
@@ -55,64 +53,22 @@ final class SystemGuardianLink: GuardianLinking {
     }
 
     func installAgent() {
-        let bundle = Bundle.main.bundleURL.standardizedFileURL
-        guard bundle.pathExtension == "app", !bundle.path.contains("/AppTranslocation/") else {
-            log.error(
-                "Not running from a stable .app bundle (\(bundle.path, privacy: .public)); guardian not installed"
-            )
+        guard let bundlePath = UserAgents.stableBundlePath(log: log) else {
+            log.error("Guardian not installed")
             return
         }
-        let agent = LaunchAgent.guardian(bundlePath: bundle.path)
+        let agent = LaunchAgent.guardian(bundlePath: bundlePath)
         guard FileManager.default.isExecutableFile(atPath: agent.program) else {
             log.error("No guardian at \(agent.program, privacy: .public); guardian not installed")
             return
         }
-        let directory = FileManager.default.homeDirectoryForCurrentUser.appending(
-            path: "Library/LaunchAgents")
-        let file = directory.appending(path: agent.fileName)
-        let domain = "gui/\(getuid())"
-        let installed = try? String(contentsOf: file, encoding: .utf8)
-        let loaded = launchctl("print", "\(domain)/\(agent.label)", quiet: true)
-        for action in LaunchAgent.sync(installed: installed, wanted: agent.plist, loaded: loaded) {
-            switch action {
-            case .write:
-                do {
-                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                    try agent.plist.write(to: file, atomically: true, encoding: .utf8)
-                    log.notice("Wrote \(file.path, privacy: .public) for \(agent.program, privacy: .public)")
-                } catch {
-                    log.error("Could not write \(file.path, privacy: .public): \(error, privacy: .public)")
-                    return
-                }
-            case .unload: _ = launchctl("bootout", "\(domain)/\(agent.label)")
-            case .load:
-                if launchctl("bootstrap", domain, file.path) { log.notice("Loaded the guardian agent") }
-            }
+        let actions = LaunchAgent.sync(
+            installed: UserAgents.installed(agent), wanted: agent.plist,
+            loaded: UserAgents.isLoaded(agent, log: log))
+        for action in actions {
+            let done = UserAgents.perform(action, agent, log: log)
+            if action == .write, !done { return }
+            if action == .load, done { log.notice("Loaded the guardian agent") }
         }
-    }
-
-    /// Fixed executable; the arguments are the user's own domain, the fixed label and the agent path.
-    private func launchctl(_ arguments: String..., quiet: Bool = false) -> Bool {
-        let process = Process()
-        process.executableURL = Self.launchctl
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        let errors = Pipe()
-        process.standardError = errors
-        do {
-            try process.run()
-        } catch {
-            log.error("Could not run launchctl: \(error, privacy: .public)")
-            return false
-        }
-        process.waitUntilExit()
-        let message = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        if process.terminationStatus != 0, !quiet {
-            log.error(
-                "launchctl \(arguments.joined(separator: " "), privacy: .public) failed (\(process.terminationStatus)): \(message, privacy: .public)"
-            )
-        }
-        return process.terminationStatus == 0
     }
 }

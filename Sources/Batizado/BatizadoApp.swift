@@ -84,6 +84,19 @@ struct MenuPanel: View {
                 "With Closed lid on, locks the screen when the lid closes and no external display is active.")
             BatteryCutoffRow(model: model)
             AutoTurnOffRow(model: model)
+            ToggleRow(
+                icon: "power",
+                title: "Launch at login",
+                isOn: Binding(
+                    get: { model.launchAtLogin },
+                    set: { model.setLaunchAtLogin($0) }
+                )
+            )
+            .disabled(!model.launchAtLoginAvailable)
+            .help(
+                model.launchAtLoginAvailable
+                    ? "Opens Batizado when you log in, with a plain agent in ~/Library/LaunchAgents."
+                    : "Move Batizado to a folder such as Applications and open it from there first.")
             Divider()
             Button("Remove helper rule") {
                 model.send(.removeHelperRule)
@@ -95,6 +108,7 @@ struct MenuPanel: View {
         }
         .padding(16)
         .frame(width: 260)
+        .onAppear { model.refreshLaunchAtLogin() }
     }
 }
 
@@ -126,6 +140,10 @@ private struct ClosedLidStatus: View {
         case .overheated(let thermal):
             warning(
                 "Closed lid stayed off: the Mac reports a \(thermal.rawValue) thermal state. Let it cool down and try again."
+            )
+        case .notRestored:
+            warning(
+                "Closed lid was left on but not turned back on: the helper rule is not installed. Turn Closed lid on to install it."
             )
         case nil: EmptyView()
         }

@@ -1,5 +1,7 @@
 public enum AppEvent: Equatable, Sendable {
     case launched
+    /// Sent once at launch, after the rule, the battery, the heat and any waiting shutdown reason are known.
+    case restore
     case setKeepAwake(Bool)
     case setKeepDisplayOn(Bool)
     case setClosedLid(Bool)

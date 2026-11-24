@@ -5,4 +5,5 @@ public enum AppInfo {
     public static let name = "Batizado"
     public static let bundleIdentifier = "io.github.victorhugobn.batizado"
     public static let guardianIdentifier = bundleIdentifier + ".guardian"
+    public static let loginIdentifier = bundleIdentifier + ".login"
 }

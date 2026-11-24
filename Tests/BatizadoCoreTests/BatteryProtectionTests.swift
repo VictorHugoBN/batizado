@@ -55,7 +55,9 @@ private func onBattery(_ percent: Int, _ state: AppState) -> AppState {
 }
 
 @Test func aCrashIsNotRestoredWhenTheBatteryIsAlreadyAtTheCutoff() {
-    let (state, effects) = reduce(onBattery(10, withRule(running())), .shutdownRecorded(.appDied))
+    let (state, effects) = relaunch(
+        closedLidOn().preferences, readings: [.batteryChanged(BatteryReading(onAC: false, percent: 10))],
+        reason: .appDied)
 
     #expect(!effects.contains(.arm(batteryCutoff: 20)))
     #expect(state.notice == .batteryLow(percent: 10, cutoff: 20))
@@ -84,7 +86,10 @@ private func onBattery(_ percent: Int, _ state: AppState) -> AppState {
 }
 
 @Test func aCrashRestoredOnLaunchIsNotNotified() {
-    #expect(!reduce(withRule(running()), .shutdownRecorded(.appDied)).effects.contains(.notify(.appDied)))
+    let effects = relaunch(closedLidOn().preferences, reason: .appDied).effects
+
+    #expect(effects.contains(.arm(batteryCutoff: 20)))
+    #expect(!effects.contains(.notify(.appDied)))
 }
 
 @Test func theCutoffIsSavedAndArmedWithClosedLid() {
@@ -104,7 +109,7 @@ private func onBattery(_ percent: Int, _ state: AppState) -> AppState {
 }
 
 @Test func neitherALaunchRestoreNorARefusalAsksForNotificationPermission() {
-    let restore = reduce(withRule(running()), .shutdownRecorded(.reboot)).effects
+    let restore = relaunch(closedLidOn().preferences, reason: .reboot).effects
     let refusal = reduce(onBattery(5, withRule(running())), .setClosedLid(true)).effects
 
     #expect(!restore.contains(.requestNotificationPermission))

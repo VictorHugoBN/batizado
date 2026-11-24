@@ -24,7 +24,8 @@ import Testing
 
     let (state, effects) = reduce(asked, .armingFinished(succeeded: false))
 
-    #expect(effects.isEmpty)
+    #expect(!effects.contains(.setSleepDisabled(true)))
+    #expect(!state.preferences.closedLid)
     #expect(state.notice == .armFailed)
     #expect(!state.closedLidDiverged)
 }
@@ -73,7 +74,7 @@ import Testing
 }
 
 @Test func aCrashRecordedByTheGuardianIsShownAndRestoresClosedLid() {
-    let (state, effects) = reduce(withRule(running()), .shutdownRecorded(.appDied))
+    let (state, effects) = relaunch(closedLidOn().preferences, reason: .appDied)
 
     #expect(state.lastShutdown == .appDied)
     #expect(state.keepAwake)
@@ -81,20 +82,23 @@ import Testing
 }
 
 @Test func aRestartRecordedByTheGuardianRestoresClosedLid() {
-    #expect(reduce(withRule(running()), .shutdownRecorded(.reboot)).effects.contains(.arm(batteryCutoff: 20)))
+    #expect(relaunch(closedLidOn().preferences, reason: .reboot).effects.contains(.arm(batteryCutoff: 20)))
 }
 
 @Test(arguments: [ShutdownReason.battery, .thermal, .timer])
 func aStickyReasonIsShownButNotRestored(reason: ShutdownReason) {
-    let (state, effects) = reduce(withRule(running()), .shutdownRecorded(reason))
+    let (state, effects) = relaunch(closedLidOn().preferences, reason: reason)
 
     #expect(state.lastShutdown == reason)
     #expect(!effects.contains(.arm(batteryCutoff: 20)))
+    #expect(!state.preferences.closedLid)
 }
 
 @Test func withoutTheRuleACrashIsShownWithoutAskingForThePassword() {
-    let (state, effects) = reduce(running(), .shutdownRecorded(.appDied))
+    let (state, effects) = relaunch(closedLidOn().preferences, rule: false, reason: .appDied)
 
     #expect(state.lastShutdown == .appDied)
-    #expect(effects.isEmpty)
+    #expect(state.notice == .notRestored)
+    #expect(!effects.contains(.installHelperRule))
+    #expect(!effects.contains(.arm(batteryCutoff: 20)))
 }

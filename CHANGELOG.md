@@ -27,3 +27,7 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   Closed lid and Keep awake off and the app notifies; Closed lid stays off while the Mac is that hot.
 - Add "Auto turn off" (Never, 1, 2, 4 or 8 hours): a countdown in the popover, a warning five minutes
   before with "Extend 30 min", and a deadline that survives a restart; the end turns everything off.
+- Add "Launch at login": a plain agent in `~/Library/LaunchAgents` opens the app once at login, follows the
+  app when it moves, and is removed when the toggle goes off.
+- Change the launch restore: Keep awake and Closed lid come back after Quit, a crash or a restart, but not
+  after a protection, the timer or turning them off; a restore that cannot run says why.

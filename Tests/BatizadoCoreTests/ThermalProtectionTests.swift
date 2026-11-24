@@ -41,7 +41,8 @@ func closedLidIsRefusedWithAnExplanationWhileTheMacIsOverheated(thermal: Thermal
 }
 
 @Test func aCrashIsNotRestoredWhileTheMacIsOverheated() {
-    let (state, effects) = reduce(at(.critical, withRule(running())), .shutdownRecorded(.reboot))
+    let (state, effects) = relaunch(
+        closedLidOn().preferences, readings: [.thermalChanged(.critical)], reason: .reboot)
 
     #expect(!effects.contains(.arm(batteryCutoff: 20)))
     #expect(state.notice == .overheated(.critical))

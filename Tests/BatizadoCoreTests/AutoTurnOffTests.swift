@@ -164,8 +164,10 @@ private func relaunched(_ preferences: Preferences, at now: Instant) -> (state: 
     let saved = reduce(closedLidOn(), .setAutoTurnOff(.oneHour), at: start).state.preferences
     let ended = withRule(relaunched(saved, at: at(7200)).state)
 
-    let (state, effects) = reduce(ended, .shutdownRecorded(.appDied), at: at(7200))
+    let reported = reduce(ended, .shutdownRecorded(.appDied), at: at(7200))
+    let (state, effects) = reduce(reported.state, .restore, at: at(7200))
 
+    #expect(reported.effects.isEmpty)
     #expect(effects.isEmpty)
     #expect(state.lastShutdown == .timer)
 }
@@ -174,7 +176,8 @@ private func relaunched(_ preferences: Preferences, at now: Instant) -> (state: 
     let saved = reduce(closedLidOn(), .setAutoTurnOff(.oneHour), at: start).state.preferences
     let back = withRule(relaunched(saved, at: at(600)).state)
 
-    let (state, effects) = reduce(back, .shutdownRecorded(.appDied), at: at(600))
+    let reported = reduce(back, .shutdownRecorded(.appDied), at: at(600)).state
+    let (state, effects) = reduce(reported, .restore, at: at(600))
 
     #expect(effects.contains(.arm(batteryCutoff: 20)))
     #expect(state.timerDeadline == at(3600))

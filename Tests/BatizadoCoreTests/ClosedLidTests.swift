@@ -63,7 +63,8 @@ import Testing
     let (state, effects) = reduce(closedLidOn(), .setClosedLid(false))
 
     #expect(state.keepAwake)
-    #expect(effects == [.setSleepDisabled(false)])
+    #expect(effects.contains(.setSleepDisabled(false)))
+    #expect(!effects.contains(.release(.systemIdle)))
 }
 
 @Test func turningKeepAwakeOffWithoutClosedLidLeavesSleepDisabledAlone() {
