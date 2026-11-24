@@ -14,7 +14,21 @@ enum Launch {
                 exit(0)
             }
         #endif
+        exitIfAnotherCopyIsRunning()
         BatizadoApp.main()
+    }
+
+    /// Two copies would fight over the one armed record; the newer one leaves before it touches anything.
+    @MainActor private static func exitIfAnotherCopyIsRunning() {
+        guard let me = SystemFacts.currentProcess else { return }
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: AppInfo.bundleIdentifier)
+            .compactMap { SystemFacts.process($0.processIdentifier) }
+        guard me.yields(to: running) else { return }
+        let others = running.filter { $0 != me }.map { String($0.pid) }.joined(separator: ", ")
+        Logger(subsystem: AppInfo.bundleIdentifier, category: "lifecycle").notice(
+            "Another copy of \(AppInfo.name, privacy: .public) is already running (pid \(others, privacy: .public)); exiting"
+        )
+        exit(0)
     }
 }
 

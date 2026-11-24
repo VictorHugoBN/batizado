@@ -32,7 +32,9 @@ public struct SharedState: Sendable {
         try write(record, to: armedFile)
     }
 
-    public func clearArmed() {
+    /// Removes the record only if `owner` wrote it, so one copy of the app never drops another's protection.
+    public func clearArmed(ownedBy owner: ProcessIdentity) {
+        guard readArmed()?.app == owner else { return }
         remove(armedFile)
     }
 

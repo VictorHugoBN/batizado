@@ -37,7 +37,11 @@ final class SystemGuardianLink: GuardianLinking {
     }
 
     func disarm() {
-        shared.clearArmed()
+        guard let app = SystemFacts.currentProcess else {
+            log.error("Could not read this process's start time; leaving the armed record to the guardian")
+            return
+        }
+        shared.clearArmed(ownedBy: app)
         DarwinNotification.post(SharedState.armedChanged)
         log.notice("Disarmed the guardian")
     }

@@ -28,6 +28,15 @@ public struct ProcessIdentity: Codable, Equatable, Sendable {
     }
 }
 
+extension ProcessIdentity {
+    /// One copy of the app per user: a copy exits when an older one is running; a tie keeps the lower pid.
+    public func yields(to running: [ProcessIdentity]) -> Bool {
+        running.contains { other in
+            other != self && (other.startedAt, other.pid) < (startedAt, pid)
+        }
+    }
+}
+
 /// Written by the app before it turns `disablesleep` on; the guardian only reverts what this record claims.
 public struct ArmedRecord: Codable, Equatable, Sendable {
     public let app: ProcessIdentity

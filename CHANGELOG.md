@@ -43,6 +43,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   protections and limitations.
 - Fix a failed read of `SleepDisabled` being taken for 0: the guardian still reverts, the app keeps the
   guardian armed, and the popover says the value cannot be read.
+- Fix two copies of the app removing each other's guardian record: a second copy exits at launch, and an
+  app only removes the armed record it wrote itself.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0
