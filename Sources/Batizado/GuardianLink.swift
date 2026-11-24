@@ -6,7 +6,7 @@ import os
 @MainActor
 protocol GuardianLinking {
     /// Writes the armed record for this process and tells the guardian; false if it could not be written.
-    func arm() -> Bool
+    func arm(batteryCutoff: Int) -> Bool
     func disarm()
     /// Reports a reason the guardian left, at once if one is waiting and again each time it records one.
     func watchShutdowns(onRecorded: @escaping @MainActor (ShutdownReason) -> Void)
@@ -21,19 +21,20 @@ final class SystemGuardianLink: GuardianLinking {
     private let shared = SharedState()
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "guardian-link")
 
-    func arm() -> Bool {
+    func arm(batteryCutoff: Int) -> Bool {
         guard let app = SystemFacts.currentProcess else {
             log.error("Could not read this process's start time; not arming")
             return false
         }
         do {
-            try shared.writeArmed(ArmedRecord(app: app, bootTime: SystemFacts.bootTime))
+            try shared.writeArmed(
+                ArmedRecord(app: app, bootTime: SystemFacts.bootTime, batteryCutoff: batteryCutoff))
         } catch {
             log.error("Could not write the armed record: \(error, privacy: .public)")
             return false
         }
         DarwinNotification.post(SharedState.armedChanged)
-        log.notice("Armed the guardian for pid \(app.pid)")
+        log.notice("Armed the guardian for pid \(app.pid) with a \(batteryCutoff)% battery cutoff")
         return true
     }
 

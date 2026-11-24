@@ -4,7 +4,7 @@ import Testing
 
 @Test func closedLidArmsTheGuardianAndWaitsForItBeforeDisablingSleep() {
     let (asked, effects) = reduce(withRule(running()), .setClosedLid(true))
-    #expect(effects.contains(.arm))
+    #expect(effects.contains(.arm(batteryCutoff: 20)))
     #expect(!effects.contains(.setSleepDisabled(true)))
 
     #expect(reduce(asked, .armingFinished(succeeded: true)).effects == [.setSleepDisabled(true)])
@@ -15,7 +15,7 @@ import Testing
 
     let (_, effects) = reduce(asked, .helperRuleInstallFinished(.succeeded))
 
-    #expect(effects.contains(.arm))
+    #expect(effects.contains(.arm(batteryCutoff: 20)))
     #expect(!effects.contains(.setSleepDisabled(true)))
 }
 
@@ -69,7 +69,7 @@ import Testing
 }
 
 @Test func turningClosedLidOnTwiceArmsOnce() {
-    #expect(!reduce(closedLidOn(), .setClosedLid(true)).effects.contains(.arm))
+    #expect(!reduce(closedLidOn(), .setClosedLid(true)).effects.contains(.arm(batteryCutoff: 20)))
 }
 
 @Test func aCrashRecordedByTheGuardianIsShownAndRestoresClosedLid() {
@@ -77,11 +77,11 @@ import Testing
 
     #expect(state.lastShutdown == .appDied)
     #expect(state.keepAwake)
-    #expect(effects.contains(.arm))
+    #expect(effects.contains(.arm(batteryCutoff: 20)))
 }
 
 @Test func aRestartRecordedByTheGuardianRestoresClosedLid() {
-    #expect(reduce(withRule(running()), .shutdownRecorded(.reboot)).effects.contains(.arm))
+    #expect(reduce(withRule(running()), .shutdownRecorded(.reboot)).effects.contains(.arm(batteryCutoff: 20)))
 }
 
 @Test(arguments: [ShutdownReason.battery, .thermal, .timer])
@@ -89,7 +89,7 @@ func aStickyReasonIsShownButNotRestored(reason: ShutdownReason) {
     let (state, effects) = reduce(withRule(running()), .shutdownRecorded(reason))
 
     #expect(state.lastShutdown == reason)
-    #expect(!effects.contains(.arm))
+    #expect(!effects.contains(.arm(batteryCutoff: 20)))
 }
 
 @Test func withoutTheRuleACrashIsShownWithoutAskingForThePassword() {

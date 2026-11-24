@@ -4,7 +4,8 @@ import Darwin
 import Dispatch
 import os
 
-/// Reacts to events only: its own start, a change of the armed record and the exit of the armed app.
+/// Reacts to events only: its own start, a change of the armed record, the exit of the armed app and a change
+/// of the power source or battery level. There is no timer.
 @MainActor
 final class GuardianService {
     private let shared = SharedState()
@@ -16,20 +17,35 @@ final class GuardianService {
         DarwinNotification.observe(SharedState.armedChanged) { [weak self] in
             self?.reconcile(on: "armed record changed")
         }
+        PowerSource.observe { [weak self] in
+            self?.reconcile(on: "power source changed")
+        }
+        if BuildMode.testMode { log.notice("Debug build: the low battery test mode is available") }
         reconcile(on: "start")
     }
 
     private func reconcile(on trigger: String) {
         let armed = shared.readArmed()
+        let battery = PowerSource.reading
         let observation = GuardianObservation(
             armed: armed,
             sleepDisabled: SystemFacts.sleepDisabled,
             process: armed.flatMap { SystemFacts.process($0.app.pid) },
-            bootTime: SystemFacts.bootTime)
+            bootTime: SystemFacts.bootTime,
+            battery: battery,
+            testMode: BuildMode.testMode)
         let effects = BatizadoCore.reconcile(observation)
-        log.notice(
-            "Reconciled on \(trigger, privacy: .public): armed pid \(armed.map { String($0.app.pid) } ?? "none", privacy: .public), SleepDisabled \(observation.sleepDisabled ? 1 : 0), effects \(String(describing: effects), privacy: .public)"
-        )
+        let batteryText = battery.map { "\($0.percent)% on \($0.onAC ? "AC" : "battery")" } ?? "none"
+        let message =
+            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), SleepDisabled \(observation.sleepDisabled ? 1 : 0), effects \(effects)"
+        // Battery level changes arrive every few minutes on battery; only the ones that act are worth a notice.
+        if trigger == "power source changed",
+            effects.allSatisfy({ if case .watchApp = $0 { true } else { false } })
+        {
+            log.info("\(message, privacy: .public)")
+        } else {
+            log.notice("\(message, privacy: .public)")
+        }
         for effect in effects {
             guard run(effect) else { break }
         }

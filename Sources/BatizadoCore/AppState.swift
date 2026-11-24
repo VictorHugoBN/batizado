@@ -7,11 +7,16 @@ public struct Preferences: Hashable, Sendable {
     public var keepAwake: Bool
     public var keepDisplayOn: Bool
     public var lockOnLidClose: Bool
+    public var batteryCutoff: Int
 
-    public init(keepAwake: Bool = false, keepDisplayOn: Bool = false, lockOnLidClose: Bool = true) {
+    public init(
+        keepAwake: Bool = false, keepDisplayOn: Bool = false, lockOnLidClose: Bool = true,
+        batteryCutoff: Int = BatteryCutoff.standard
+    ) {
         self.keepAwake = keepAwake
         self.keepDisplayOn = keepDisplayOn
         self.lockOnLidClose = lockOnLidClose
+        self.batteryCutoff = batteryCutoff
     }
 }
 
@@ -34,6 +39,8 @@ public enum Notice: Equatable, Sendable {
     case removeFailed(String)
     /// The armed record could not be written, so Closed lid stayed off.
     case armFailed
+    /// Closed lid stayed off because the low battery protection would turn it off at once.
+    case batteryLow(percent: Int, cutoff: Int)
 }
 
 public struct AppState: Equatable, Sendable {
@@ -53,6 +60,8 @@ public struct AppState: Equatable, Sendable {
     /// Nil until the lid sensor first reports, so a lid already closed at launch is not a closing.
     var lidClosed: Bool?
     var externalDisplay = false
+    /// Nil until the power source is first read, and on a Mac without a battery.
+    public private(set) var battery: BatteryReading?
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -61,6 +70,7 @@ public struct AppState: Equatable, Sendable {
     public var keepAwake: Bool { preferences.keepAwake }
     public var keepDisplayOn: Bool { preferences.keepDisplayOn }
     public var lockOnLidClose: Bool { preferences.lockOnLidClose }
+    public var batteryCutoff: Int { preferences.batteryCutoff }
 
     /// The system's real `SleepDisabled` differs from what the app last asked for.
     public var closedLidDiverged: Bool {
@@ -80,8 +90,15 @@ public struct AppState: Equatable, Sendable {
             preferences.keepAwake = on
             if !on, closedLidRequest == true || sleepDisabled { return setClosedLid(false) }
         case .setKeepDisplayOn(let on): preferences.keepDisplayOn = on
-        case .setClosedLid(let on): return setClosedLid(on)
+        case .setClosedLid(let on):
+            let effects = setClosedLid(on)
+            guard on, closedLidRefusal == nil else { return effects }
+            return effects + [.requestNotificationPermission]
         case .setLockOnLidClose(let on): preferences.lockOnLidClose = on
+        case .setBatteryCutoff(let cutoff):
+            preferences.batteryCutoff = cutoff
+            return armed ? [.updateArmed(batteryCutoff: cutoff)] : []
+        case .batteryChanged(let reading): battery = reading
         case .sleepDisabledChanged(let disabled):
             sleepDisabled = disabled
             if !disabled { return disarmIfOff() }
@@ -90,7 +107,12 @@ public struct AppState: Equatable, Sendable {
             if !disabled { return disarmIfOff() }
         case .shutdownRecorded(let reason):
             lastShutdown = reason
-            guard !reason.isSticky, helperRule == .installed, closedLidRequest != true else { return [] }
+            if reason.isSticky {
+                let effects = setClosedLid(false)
+                preferences.keepAwake = false
+                return effects + [.notify(reason)]
+            }
+            guard helperRule == .installed, closedLidRequest != true else { return [] }
             return setClosedLid(true)
         case .lidChanged(let closed):
             let before = unattended
@@ -135,8 +157,18 @@ public struct AppState: Equatable, Sendable {
         return sleepDisabled && lockOnLidClose ? [.lockScreen] : []
     }
 
+    /// Turning Closed lid on now would only have the low battery protection turn it off again.
+    private var closedLidRefusal: Notice? {
+        guard let battery, battery.reachesCutoff(batteryCutoff) else { return nil }
+        return .batteryLow(percent: battery.percent, cutoff: batteryCutoff)
+    }
+
     private mutating func setClosedLid(_ on: Bool) -> [Effect] {
         notice = nil
+        if on, let refusal = closedLidRefusal {
+            notice = refusal
+            return []
+        }
         guard helperRule == .installed else {
             guard on, !awaitingHelperRule else { return [] }
             awaitingHelperRule = true
@@ -146,7 +178,7 @@ public struct AppState: Equatable, Sendable {
         closedLidRequest = on
         guard on else { return [.setSleepDisabled(false)] }
         preferences.keepAwake = true
-        return armed ? [.setSleepDisabled(true)] : [.arm]
+        return armed ? [.setSleepDisabled(true)] : [.arm(batteryCutoff: batteryCutoff)]
     }
 
     private mutating func armingFinished(succeeded: Bool) -> [Effect] {

@@ -1,4 +1,5 @@
 import BatizadoCore
+import BatizadoSystem
 import Foundation
 
 @MainActor
@@ -13,6 +14,7 @@ struct UserDefaultsPreferences: PreferencesStoring {
         static let keepAwake = "keepAwake"
         static let keepDisplayOn = "keepDisplayOn"
         static let lockOnLidClose = "lockOnLidClose"
+        static let batteryCutoff = "batteryCutoff"
     }
 
     private let defaults = UserDefaults.standard
@@ -21,7 +23,10 @@ struct UserDefaultsPreferences: PreferencesStoring {
         Preferences(
             keepAwake: defaults.bool(forKey: Key.keepAwake),
             keepDisplayOn: defaults.bool(forKey: Key.keepDisplayOn),
-            lockOnLidClose: defaults.object(forKey: Key.lockOnLidClose) as? Bool ?? true
+            lockOnLidClose: defaults.object(forKey: Key.lockOnLidClose) as? Bool ?? true,
+            batteryCutoff: BatteryCutoff.normalized(
+                defaults.object(forKey: Key.batteryCutoff) as? Int ?? BatteryCutoff.standard,
+                testMode: BuildMode.testMode)
         )
     }
 
@@ -29,5 +34,6 @@ struct UserDefaultsPreferences: PreferencesStoring {
         defaults.set(preferences.keepAwake, forKey: Key.keepAwake)
         defaults.set(preferences.keepDisplayOn, forKey: Key.keepDisplayOn)
         defaults.set(preferences.lockOnLidClose, forKey: Key.lockOnLidClose)
+        defaults.set(preferences.batteryCutoff, forKey: Key.batteryCutoff)
     }
 }

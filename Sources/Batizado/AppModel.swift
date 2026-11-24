@@ -13,6 +13,9 @@ final class AppModel {
     private let helperRule: any HelperRuleManaging
     private let guardian: any GuardianLinking
     private let screenLock: any ScreenLocking
+    private let notifier: any Notifying
+    // Held so its notification handler, which only weakly captures it, keeps firing.
+    private let battery: any BatterySensing
 
     init(
         assertions: any PowerAssertionHolding = SystemPowerAssertions(),
@@ -23,7 +26,9 @@ final class AppModel {
         guardian: any GuardianLinking = SystemGuardianLink(),
         lid: any LidSensing = SystemLidSensor(),
         displays: any ExternalDisplaySensing = SystemExternalDisplaySensor(),
-        screenLock: any ScreenLocking = systemScreenLock()
+        screenLock: any ScreenLocking = systemScreenLock(),
+        battery: any BatterySensing = SystemBatterySensor(),
+        notifier: any Notifying = UserNotifier()
     ) {
         self.assertions = assertions
         self.preferences = preferences
@@ -32,11 +37,15 @@ final class AppModel {
         self.helperRule = helperRule
         self.guardian = guardian
         self.screenLock = screenLock
+        self.notifier = notifier
+        self.battery = battery
         state = AppState(preferences: preferences.load())
         send(.launched)
         send(.helperRuleChecked(installed: helperRule.isInstalled()))
         sleepDisabled.start { [weak self] in self?.send(.sleepDisabledChanged($0)) }
         helperRule.watch { [weak self] in self?.send(.helperRuleChecked(installed: $0)) }
+        // Before the shutdown reason, so restoring Closed lid after a crash sees the battery level.
+        battery.start { [weak self] in self?.send(.batteryChanged($0)) }
         guardian.installAgent()
         guardian.watchShutdowns { [weak self] in self?.send(.shutdownRecorded($0)) }
         displays.start { [weak self] in self?.send(.externalDisplayChanged(active: $0)) }
@@ -68,9 +77,12 @@ final class AppModel {
             }
         case .installHelperRule: send(.helperRuleInstallFinished(helperRule.install()))
         case .removeHelperRule: send(.helperRuleRemovalFinished(helperRule.remove()))
-        case .arm: send(.armingFinished(succeeded: guardian.arm()))
+        case .arm(let cutoff): send(.armingFinished(succeeded: guardian.arm(batteryCutoff: cutoff)))
+        case .updateArmed(let cutoff): _ = guardian.arm(batteryCutoff: cutoff)
         case .disarm: guardian.disarm()
         case .lockScreen: _ = screenLock.lock()
+        case .requestNotificationPermission: notifier.requestPermission()
+        case .notify(let reason): notifier.post(title: "Closed lid turned off", body: reason.explanation)
         }
     }
 }

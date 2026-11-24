@@ -1,5 +1,6 @@
 import AppKit
 import BatizadoCore
+import BatizadoSystem
 import SwiftUI
 import os
 
@@ -81,6 +82,7 @@ struct MenuPanel: View {
             )
             .help(
                 "With Closed lid on, locks the screen when the lid closes and no external display is active.")
+            BatteryCutoffRow(model: model)
             Divider()
             Button("Remove helper rule") {
                 model.send(.removeHelperRule)
@@ -116,6 +118,10 @@ private struct ClosedLidStatus: View {
         case .installFailed(let message): warning("Could not install the helper rule: \(message)")
         case .removeFailed(let message): warning("Could not remove the helper rule: \(message)")
         case .armFailed: warning("Closed lid stayed off: the guardian could not be armed.")
+        case .batteryLow(let percent, let cutoff):
+            warning(
+                "Closed lid stayed off: the battery is at \(percent)%, at or below the \(cutoff)% cutoff. Plug in the charger or lower the cutoff."
+            )
         case nil: EmptyView()
         }
         if let reason = state.lastShutdown {
@@ -131,12 +137,42 @@ private struct ClosedLidStatus: View {
     }
 }
 
+private struct BatteryCutoffRow: View {
+    let model: AppModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "battery.25percent")
+                .frame(width: 20)
+                .foregroundStyle(.secondary)
+            Text("Low battery cutoff")
+            Spacer(minLength: 12)
+            Picker(
+                "Low battery cutoff",
+                selection: Binding(
+                    get: { model.state.batteryCutoff },
+                    set: { model.send(.setBatteryCutoff($0)) }
+                )
+            ) {
+                ForEach(BatteryCutoff.options(testMode: BuildMode.testMode), id: \.self) { cutoff in
+                    Text(cutoff == BatteryCutoff.testValue ? "\(cutoff)% (test)" : "\(cutoff)%").tag(cutoff)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .help("On battery, turns Closed lid and Keep awake off at or below this level. Never on the charger.")
+    }
+}
+
 extension ShutdownReason {
-    fileprivate var explanation: String {
+    var explanation: String {
         switch self {
         case .appDied: "Closed lid was turned off because Batizado stopped unexpectedly."
         case .reboot: "Closed lid was turned off because the Mac restarted with it on."
-        case .battery: "Closed lid was turned off because the battery ran low."
+        case .battery:
+            "Closed lid and Keep awake were turned off because the battery reached the low battery cutoff."
         case .thermal: "Closed lid was turned off because the Mac got too hot."
         case .timer: "Closed lid was turned off because the timer ran out."
         case .user, .quit: "Closed lid was turned off."

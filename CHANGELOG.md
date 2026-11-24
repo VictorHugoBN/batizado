@@ -21,3 +21,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   shows why on the next launch and turns Closed lid back on.
 - Add "Lock on lid close" (on by default): with Closed lid on, closing the lid without an external display
   locks the screen.
+- Add the low battery protection: on battery at or below the "Low battery cutoff" (20% by default, 5% to
+  50%), the guardian turns Closed lid and Keep awake off and the app notifies and shows why.

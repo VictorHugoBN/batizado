@@ -4,6 +4,9 @@ public enum AppEvent: Equatable, Sendable {
     case setKeepDisplayOn(Bool)
     case setClosedLid(Bool)
     case setLockOnLidClose(Bool)
+    case setBatteryCutoff(Int)
+    /// The power source or the battery level changed, or was read at launch; nil without a battery.
+    case batteryChanged(BatteryReading?)
     case helperRuleChecked(installed: Bool)
     case reinstallHelperRule
     case helperRuleInstallFinished(AdministratorOutcome)
@@ -33,11 +36,17 @@ public enum Effect: Hashable, Sendable {
     /// Remove `HelperRule.path` through the administrator password window.
     case removeHelperRule
     /// Write the armed record and tell the guardian, then report `armingFinished`; nothing goes on before.
-    case arm
+    case arm(batteryCutoff: Int)
+    /// Rewrite the armed record with a new cutoff and tell the guardian; Closed lid stays as it is.
+    case updateArmed(batteryCutoff: Int)
     /// Remove the armed record and tell the guardian, once `disablesleep` is confirmed off.
     case disarm
     /// Lock the screen now, without sleeping the display or the Mac.
     case lockScreen
+    /// Ask once for permission to post notifications; only after the user turns Closed lid on, never at launch.
+    case requestNotificationPermission
+    /// Tell the user why the mode went off, if notifications are allowed; the popover shows it either way.
+    case notify(ShutdownReason)
 }
 
 public func reduce(_ state: AppState, _ event: AppEvent) -> (state: AppState, effects: [Effect]) {

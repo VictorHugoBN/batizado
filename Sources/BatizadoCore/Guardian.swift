@@ -33,10 +33,26 @@ public struct ArmedRecord: Codable, Equatable, Sendable {
     public let app: ProcessIdentity
     /// `kern.boottime` in seconds when the app armed, to tell a restart from a crash.
     public let bootTime: Int64
+    /// The low battery cutoff in percent, rewritten when the user changes it while armed.
+    public let batteryCutoff: Int
 
-    public init(app: ProcessIdentity, bootTime: Int64) {
+    public init(app: ProcessIdentity, bootTime: Int64, batteryCutoff: Int) {
         self.app = app
         self.bootTime = bootTime
+        self.batteryCutoff = batteryCutoff
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case app, bootTime, batteryCutoff
+    }
+
+    // A record from a build without the cutoff must still be honored, or the guardian would ignore it.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        app = try container.decode(ProcessIdentity.self, forKey: .app)
+        bootTime = try container.decode(Int64.self, forKey: .bootTime)
+        batteryCutoff =
+            try container.decodeIfPresent(Int.self, forKey: .batteryCutoff) ?? BatteryCutoff.standard
     }
 }
 
@@ -46,12 +62,21 @@ public struct GuardianObservation: Equatable, Sendable {
     /// The process that holds the armed record's pid right now, if any.
     public let process: ProcessIdentity?
     public let bootTime: Int64
+    /// Nil on a Mac without a battery.
+    public let battery: BatteryReading?
+    /// Debug builds honor the test cutoff; a release guardian clamps it to the normal options.
+    public let testMode: Bool
 
-    public init(armed: ArmedRecord?, sleepDisabled: Bool, process: ProcessIdentity?, bootTime: Int64) {
+    public init(
+        armed: ArmedRecord?, sleepDisabled: Bool, process: ProcessIdentity?, bootTime: Int64,
+        battery: BatteryReading? = nil, testMode: Bool = false
+    ) {
+        self.testMode = testMode
         self.armed = armed
         self.sleepDisabled = sleepDisabled
         self.process = process
         self.bootTime = bootTime
+        self.battery = battery
     }
 }
 
@@ -66,11 +91,20 @@ public enum GuardianEffect: Equatable, Sendable {
     case signalApp
 }
 
-/// Run at guardian start, when the app's process exits and when the armed record changes.
+/// Run at guardian start, when the app's process exits, when the armed record changes and when the power
+/// source or the battery level changes.
 public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
     guard let armed = observation.armed else { return [] }
-    if observation.process == armed.app { return [.watchApp(pid: armed.app.pid)] }
-    let reason: ShutdownReason = observation.bootTime == armed.bootTime ? .appDied : .reboot
+    let reason: ShutdownReason
+    if observation.process == armed.app {
+        let cutoff = BatteryCutoff.normalized(armed.batteryCutoff, testMode: observation.testMode)
+        guard observation.battery?.reachesCutoff(cutoff) == true else {
+            return [.watchApp(pid: armed.app.pid)]
+        }
+        reason = .battery
+    } else {
+        reason = observation.bootTime == armed.bootTime ? .appDied : .reboot
+    }
     let revert: [GuardianEffect] = observation.sleepDisabled ? [.revertSleepDisabled] : []
     return revert + [.recordShutdown(reason), .clearArmed(armed), .signalApp]
 }

@@ -13,7 +13,7 @@ import Testing
 @Test func closedLidWithoutTheRuleAsksToInstallItAndChangesNothingYet() {
     let (state, effects) = reduce(running(), .setClosedLid(true))
 
-    #expect(effects == [.installHelperRule])
+    #expect(effects == [.installHelperRule, .requestNotificationPermission])
     #expect(!state.keepAwake)
 }
 
@@ -156,7 +156,7 @@ import Testing
     let (state, effects) = reduce(removed, .setClosedLid(true))
 
     #expect(state.helperRule == .notInstalled)
-    #expect(effects == [.installHelperRule])
+    #expect(effects == [.installHelperRule, .requestNotificationPermission])
 }
 
 @Test func cancellingTheRemovalKeepsTheRule() {
