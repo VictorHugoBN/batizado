@@ -5,12 +5,15 @@ import Dispatch
 import os
 
 /// Reacts to events only: its own start, a change of the armed record, the exit of the armed app, a change
-/// of the power source or battery level and a change of the thermal state. There is no timer.
+/// of the power source or battery level and a change of the thermal state. The only timer is the retry of a
+/// revert that failed, which exists while that revert is pending.
 @MainActor
 final class GuardianService {
     private let shared = SharedState()
     private var watched: (pid: Int32, source: any DispatchSourceProcess)?
     private var thermal: DarwinSubscription?
+    private var retry: (any DispatchSourceTimer)?
+    private var failedAttempts = 0
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "guardian")
 
     func start() {
@@ -33,6 +36,7 @@ final class GuardianService {
         let armed = shared.readArmed()
         let battery = PowerSource.reading
         let thermal = ThermalPressure.state
+        let pending = shared.readPendingRevert()
         let observation = GuardianObservation(
             armed: armed,
             sleepDisabled: SystemFacts.sleepDisabled,
@@ -40,11 +44,12 @@ final class GuardianService {
             bootTime: SystemFacts.bootTime,
             battery: battery,
             thermal: thermal,
-            testMode: BuildMode.testMode)
+            testMode: BuildMode.testMode,
+            pending: pending)
         let effects = BatizadoCore.reconcile(observation)
         let batteryText = battery.map { "\($0.percent)% on \($0.onAC ? "AC" : "battery")" } ?? "none"
         let message =
-            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(thermal?.rawValue ?? "unknown"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
+            "Reconciled on \(trigger): armed pid \(armed.map { String($0.app.pid) } ?? "none"), cutoff \(armed.map { "\($0.batteryCutoff)%" } ?? "none"), battery \(batteryText), thermal \(thermal?.rawValue ?? "unknown"), pending \(pending.map { $0.reason.rawValue } ?? "none"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
         // Battery level changes arrive every few minutes on battery; only the ones that act are worth a notice.
         if trigger == "power source changed",
             effects.allSatisfy({ if case .watchApp = $0 { true } else { false } })
@@ -53,15 +58,51 @@ final class GuardianService {
         } else {
             log.notice("\(message, privacy: .public)")
         }
-        for effect in effects {
-            guard run(effect) else { break }
+        for effect in effects where !run(effect) {
+            scheduleRetry()
+            return
         }
+        guard effects.contains(.clearPending) else { return }
+        cancelRetry()
+        // A newer armed record may have waited behind the pending revert.
+        reconcile(on: "pending revert done")
     }
 
-    /// False stops the remaining effects, so a failed revert keeps the armed record for the next attempt.
+    /// One shot, longer after each failure; the pending revert on disk survives a restart in between.
+    private func scheduleRetry() {
+        guard retry == nil else { return }
+        failedAttempts += 1
+        let delay = RevertRetry.delay(afterFailures: failedAttempts)
+        let source = DispatchSource.makeTimerSource(queue: .main)
+        source.schedule(deadline: .now() + .seconds(delay))
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated {
+                self?.retry = nil
+                self?.reconcile(on: "retry \(self?.failedAttempts ?? 0)")
+            }
+        }
+        source.resume()
+        retry = source
+        log.notice("The revert did not finish; trying again in \(delay) s")
+    }
+
+    private func cancelRetry() {
+        retry?.cancel()
+        retry = nil
+        failedAttempts = 0
+    }
+
+    /// False stops the remaining effects, so a failed revert keeps the armed record and the pending revert.
     private func run(_ effect: GuardianEffect) -> Bool {
         switch effect {
         case .watchApp(let pid): watch(pid)
+        case .markPending(let pending):
+            do {
+                try shared.writePendingRevert(pending)
+            } catch {
+                log.error("Could not store the pending revert: \(error, privacy: .public)")
+            }
+        case .clearPending: shared.clearPendingRevert()
         case .revertSleepDisabled: return revertSleepDisabled()
         case .recordShutdown(let reason):
             do {
@@ -115,7 +156,7 @@ final class GuardianService {
         while waitpid(pid, &status, 0) == -1, errno == EINTR {}
         let exitCode = (status & 0x7f) == 0 ? (status >> 8) & 0xff : -1
         guard exitCode == 0 else {
-            log.error("disablesleep 0 failed with status \(exitCode); keeping the armed record")
+            log.error("disablesleep 0 failed with status \(exitCode); keeping the revert pending")
             return false
         }
         log.notice("disablesleep 0 ran; SleepDisabled is now \(SystemFacts.sleepDisabled.sleepDisabledText)")

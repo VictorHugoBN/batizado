@@ -17,6 +17,7 @@ public struct SharedState: Sendable {
     public let directory: URL
     private var armedFile: URL { directory.appending(path: "armed.json") }
     private var shutdownFile: URL { directory.appending(path: "last-shutdown.json") }
+    private var pendingFile: URL { directory.appending(path: "pending-revert.json") }
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "shared-state")
 
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser) {
@@ -42,6 +43,18 @@ public struct SharedState: Sendable {
     public func clearArmed(ifStill record: ArmedRecord) {
         guard readArmed() == record else { return }
         remove(armedFile)
+    }
+
+    public func readPendingRevert() -> PendingRevert? {
+        read(PendingRevert.self, from: pendingFile)
+    }
+
+    public func writePendingRevert(_ pending: PendingRevert) throws {
+        try write(pending, to: pendingFile)
+    }
+
+    public func clearPendingRevert() {
+        remove(pendingFile)
     }
 
     public func writeShutdown(_ reason: ShutdownReason) throws {

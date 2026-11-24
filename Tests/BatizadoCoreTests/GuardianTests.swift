@@ -13,15 +13,27 @@ private func observe(
     bootTime: Int64 = boot,
     battery: BatteryReading? = nil,
     thermal: ThermalState? = nil,
-    testMode: Bool = false
+    testMode: Bool = false,
+    pending: PendingRevert? = nil
 ) -> [GuardianEffect] {
     reconcile(
         GuardianObservation(
             armed: record, sleepDisabled: sleepDisabled, process: running, bootTime: bootTime,
             battery: battery,
             thermal: thermal,
-            testMode: testMode)
+            testMode: testMode,
+            pending: pending)
     )
+}
+
+/// A decision taken now: stored first, then carried out.
+private func decided(_ reason: ShutdownReason, runs: Bool = true) -> [GuardianEffect] {
+    [.markPending(PendingRevert(reason: reason, record: armed))] + carriedOut(reason, runs: runs)
+}
+
+private func carriedOut(_ reason: ShutdownReason, runs: Bool = true) -> [GuardianEffect] {
+    (runs ? [.revertSleepDisabled] : [])
+        + [.recordShutdown(reason), .clearArmed(armed), .clearPending, .signalApp]
 }
 
 @Test func armedWithTheAppAliveOnlyWatchesIt() {
@@ -29,16 +41,13 @@ private func observe(
 }
 
 @Test func armedWithTheAppDeadRevertsAndRecordsAppDied() {
-    #expect(
-        observe(running: nil) == [
-            .revertSleepDisabled, .recordShutdown(.appDied), .clearArmed(armed), .signalApp,
-        ])
+    #expect(observe(running: nil) == decided(.appDied))
 }
 
 @Test func aRecycledPidIsNotMistakenForTheApp() {
     let stranger = ProcessIdentity(pid: 4242, startedAt: 1_700_000_999_000_000)
 
-    #expect(observe(running: stranger).first == .revertSleepDisabled)
+    #expect(observe(running: stranger).contains(.revertSleepDisabled))
 }
 
 @Test func armedBeforeARestartRecordsReboot() {
@@ -50,10 +59,7 @@ private func observe(
 }
 
 @Test func aStaleRecordWithSleepAlreadyEnabledIsClearedAndReportedWithoutRunningAnything() {
-    #expect(
-        observe(sleepDisabled: false, running: nil) == [
-            .recordShutdown(.appDied), .clearArmed(armed), .signalApp,
-        ])
+    #expect(observe(sleepDisabled: false, running: nil) == decided(.appDied, runs: false))
 }
 
 @Test(arguments: [ShutdownReason.battery, .thermal, .timer])
@@ -67,10 +73,7 @@ func crashesRestartsAndTheUserAreNotSticky(reason: ShutdownReason) {
 }
 
 @Test func onBatteryAtTheArmedCutoffTheGuardianRevertsEvenWithTheAppAlive() {
-    #expect(
-        observe(battery: BatteryReading(onAC: false, percent: 20)) == [
-            .revertSleepDisabled, .recordShutdown(.battery), .clearArmed(armed), .signalApp,
-        ])
+    #expect(observe(battery: BatteryReading(onAC: false, percent: 20)) == decided(.battery))
 }
 
 @Test func onBatteryAboveTheArmedCutoffTheGuardianOnlyWatches() {
@@ -95,9 +98,8 @@ func crashesRestartsAndTheUserAreNotSticky(reason: ShutdownReason) {
 
 @Test func aLowBatteryWithSleepAlreadyEnabledIsRecordedWithoutRunningAnything() {
     #expect(
-        observe(sleepDisabled: false, battery: BatteryReading(onAC: false, percent: 5)) == [
-            .recordShutdown(.battery), .clearArmed(armed), .signalApp,
-        ])
+        observe(sleepDisabled: false, battery: BatteryReading(onAC: false, percent: 5))
+            == decided(.battery, runs: false))
 }
 
 @Test func onlyADebugGuardianHonorsTheTestCutoffOnAFullBattery() {
@@ -110,10 +112,7 @@ func crashesRestartsAndTheUserAreNotSticky(reason: ShutdownReason) {
 
 @Test(arguments: [ThermalState.serious, .critical])
 func anOverheatedMacWithTheAppAliveRevertsAndRecordsThermal(thermal: ThermalState) {
-    #expect(
-        observe(thermal: thermal) == [
-            .revertSleepDisabled, .recordShutdown(.thermal), .clearArmed(armed), .signalApp,
-        ])
+    #expect(observe(thermal: thermal) == decided(.thermal))
 }
 
 @Test(arguments: [ThermalState.nominal, .fair])
@@ -136,8 +135,31 @@ func aNominalOrFairMacOnlyWatchesTheApp(thermal: ThermalState) {
 }
 
 @Test func anUnreadableSleepDisabledIsNotTakenForZeroAndTheRevertStillRuns() {
+    #expect(observe(sleepDisabled: nil, running: nil) == decided(.appDied))
+}
+
+@Test func aPendingThermalRevertIsCarriedOutAfterTheMacCooledDown() {
+    let pending = PendingRevert(reason: .thermal, record: armed)
+
+    #expect(observe(thermal: .nominal, pending: pending) == carriedOut(.thermal))
+}
+
+@Test func aFailedRevertIsRetriedSoonerFirstThenAtMostOnceAMinute() {
+    #expect((1...8).map(RevertRetry.delay(afterFailures:)) == [2, 4, 8, 16, 32, 60, 60, 60])
+}
+
+@Test func aPendingRevertWithSleepConfirmedOffIsFinishedWithoutRunningAnything() {
+    let pending = PendingRevert(reason: .battery, record: armed)
+
     #expect(
-        observe(sleepDisabled: nil, running: nil) == [
-            .revertSleepDisabled, .recordShutdown(.appDied), .clearArmed(armed), .signalApp,
-        ])
+        observe(sleepDisabled: false, battery: BatteryReading(onAC: true, percent: 90), pending: pending)
+            == carriedOut(.battery, runs: false))
+}
+
+@Test func aPendingRevertIsFinishedBeforeANewerArmedRecordIsLookedAt() {
+    let newer = ArmedRecord(app: ProcessIdentity(pid: 5151, startedAt: 9), bootTime: boot, batteryCutoff: 20)
+    let pending = PendingRevert(reason: .appDied, record: armed)
+
+    #expect(
+        observe(armed: newer, running: newer.app, pending: pending) == carriedOut(.appDied))
 }

@@ -64,6 +64,10 @@ the app sends a notification and the menu says why. Closed lid refuses to turn o
 the cutoff or the Mac is too hot. After a crash or a restart, the menu says what happened and the app turns
 Closed lid back on the next time it opens.
 
+Once the guardian decides to turn it off, the decision is written to disk and carried through: if the
+command fails, it tries again (after 2 s, then 4 s, and so on, at most once a minute) until it succeeds,
+even if the Mac cools down or gets plugged in meanwhile, and a restarted guardian picks it up.
+
 The guardian only reverts what the app armed: a `disablesleep 1` you set yourself in a terminal is left alone.
 
 ## What gets installed, and why a password is asked once

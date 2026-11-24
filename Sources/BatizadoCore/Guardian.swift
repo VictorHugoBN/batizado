@@ -65,6 +65,19 @@ public struct ArmedRecord: Codable, Equatable, Sendable {
     }
 }
 
+/// A revert the guardian decided on and has not finished; stored so a restart or a cooler reading cannot
+/// undo the decision.
+public struct PendingRevert: Codable, Equatable, Sendable {
+    public let reason: ShutdownReason
+    /// The armed record the decision was about, removed once the revert is done.
+    public let record: ArmedRecord
+
+    public init(reason: ShutdownReason, record: ArmedRecord) {
+        self.reason = reason
+        self.record = record
+    }
+}
+
 public struct GuardianObservation: Equatable, Sendable {
     public let armed: ArmedRecord?
     /// Nil when the system's value could not be read; unknown is never taken for 0.
@@ -78,11 +91,15 @@ public struct GuardianObservation: Equatable, Sendable {
     public let thermal: ThermalState?
     /// Debug builds honor the test cutoff; a release guardian clamps it to the normal options.
     public let testMode: Bool
+    /// A revert decided earlier and not finished, by this guardian process or an earlier one.
+    public let pending: PendingRevert?
 
     public init(
         armed: ArmedRecord?, sleepDisabled: Bool?, process: ProcessIdentity?, bootTime: Int64,
-        battery: BatteryReading? = nil, thermal: ThermalState? = nil, testMode: Bool = false
+        battery: BatteryReading? = nil, thermal: ThermalState? = nil, testMode: Bool = false,
+        pending: PendingRevert? = nil
     ) {
+        self.pending = pending
         self.testMode = testMode
         self.thermal = thermal
         self.armed = armed
@@ -94,19 +111,26 @@ public struct GuardianObservation: Equatable, Sendable {
 }
 
 /// There is deliberately no effect that turns the mode on.
+/// Effects run in order; a failed revert or a note that cannot be written stops the rest and schedules a
+/// retry, which only exists while a revert is pending.
 public enum GuardianEffect: Equatable, Sendable {
     case watchApp(pid: Int32)
+    /// Store the decision before acting on it; a failure to store it does not stop the revert.
+    case markPending(PendingRevert)
     /// Run `/usr/bin/sudo -n /usr/bin/pmset -a disablesleep 0`; stop here if it fails.
     case revertSleepDisabled
+    /// Leave the reason for the app; stop here if it cannot be written.
     case recordShutdown(ShutdownReason)
     /// Remove the armed record only if it is still this one, so a newer app instance keeps its own.
     case clearArmed(ArmedRecord)
+    case clearPending
     case signalApp
 }
 
 /// Run at guardian start, when the app's process exits, when the armed record changes, when the power
 /// source or the battery level changes and when the thermal state changes.
 public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
+    if let pending = observation.pending { return carryOut(pending, observation.sleepDisabled) }
     guard let armed = observation.armed else { return [] }
     let reason: ShutdownReason
     if observation.process == armed.app {
@@ -121,6 +145,19 @@ public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
     } else {
         reason = observation.bootTime == armed.bootTime ? .appDied : .reboot
     }
-    let revert: [GuardianEffect] = observation.sleepDisabled == false ? [] : [.revertSleepDisabled]
-    return revert + [.recordShutdown(reason), .clearArmed(armed), .signalApp]
+    let pending = PendingRevert(reason: reason, record: armed)
+    return [.markPending(pending)] + carryOut(pending, observation.sleepDisabled)
+}
+
+/// Runs the command unless `SleepDisabled` is confirmed 0; an unknown value is reverted too.
+private func carryOut(_ pending: PendingRevert, _ sleepDisabled: Bool?) -> [GuardianEffect] {
+    let revert: [GuardianEffect] = sleepDisabled == false ? [] : [.revertSleepDisabled]
+    return revert + [.recordShutdown(pending.reason), .clearArmed(pending.record), .clearPending, .signalApp]
+}
+
+public enum RevertRetry {
+    /// Seconds before the next attempt after `failures` failed ones in a row: 2, 4, 8... at most 60.
+    public static func delay(afterFailures failures: Int) -> Int {
+        min(60, 1 << min(max(failures, 1), 6))
+    }
 }

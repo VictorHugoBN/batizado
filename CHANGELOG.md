@@ -47,6 +47,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   app only removes the armed record it wrote itself.
 - Fix a protection or timer shutdown being undone by an app crash at the wrong moment: the app saves the
   result before it deletes the guardian's note, and the guardian keeps its record when it cannot write one.
+- Fix a failed guardian revert being dropped once the Mac cooled down or charged: the decision is stored on
+  disk and retried, backing off up to once a minute, until `disablesleep` is off, across guardian restarts.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0
