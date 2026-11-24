@@ -53,6 +53,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   guardian checks again 5 s after cleaning up and turns it off if it appeared.
 - Fix Closed lid turning on with no guardian running: it now waits for a running guardian to acknowledge it
   (12 s at most, also at launch), and turns off if the guardian quits and does not come back.
+- Fix "Remove helper rule" removing the rule while Closed lid was still on: it removes it only after
+  `SleepDisabled` reads 0, and otherwise keeps it and says why.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

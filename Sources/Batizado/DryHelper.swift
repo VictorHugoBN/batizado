@@ -14,9 +14,11 @@
 
         static let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "dry-helper")
 
-        /// Drive the same events as the popover's rows, by name: `...debug-closed-lid-on|off`.
+        /// Drive the same events as the popover's rows, by name: `...debug-closed-lid-on|off` and
+        /// `...debug-remove-helper-rule`.
         static let events: [(String, AppEvent)] = [
             ("closed-lid-on", .setClosedLid(true)), ("closed-lid-off", .setClosedLid(false)),
+            ("remove-helper-rule", .removeHelperRule),
         ]
     }
 

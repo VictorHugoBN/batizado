@@ -59,6 +59,8 @@ public enum Notice: Equatable, Sendable {
     case guardianNotRunning
     /// Closed lid was turned off: the guardian exited and none came back in time.
     case guardianLost
+    /// "Remove helper rule" kept the rule: Closed lid could not be turned off first.
+    case ruleKept
 }
 
 /// Why the app is waiting for a guardian's acknowledgement.
@@ -82,6 +84,8 @@ public struct AppState: Equatable, Sendable {
     /// Why the guardian last turned the mode off, shown until the app quits.
     public private(set) var lastShutdown: ShutdownReason?
     var awaitingHelperRule = false
+    /// "Remove helper rule" waits for `SleepDisabled` to read 0: without the rule nothing could turn it off.
+    var removingHelperRule = false
     /// The armed record is on disk, so the guardian reverts if this process dies.
     var armed = false
     /// A live guardian acknowledged the armed record; `disablesleep` goes on only after this.
@@ -178,7 +182,10 @@ public struct AppState: Equatable, Sendable {
         case .thermalChanged(let state): thermal = state
         case .sleepDisabledChanged(let disabled):
             sleepDisabled = disabled
-            if disabled == false { return disarmIfOff() }
+            return (disabled == false ? disarmIfOff() : []) + continueRuleRemoval(settled: false)
+        case .sleepDisabledSettled(let disabled):
+            sleepDisabled = disabled
+            return (disabled == false ? disarmIfOff() : []) + continueRuleRemoval(settled: true)
         case .armingFinished(let succeeded): return armingFinished(succeeded: succeeded)
         case .acknowledgementFinished(let received): return acknowledgementFinished(received: received)
         case .guardianExited:
@@ -211,7 +218,12 @@ public struct AppState: Equatable, Sendable {
         case .removeHelperRule:
             notice = nil
             awaitingHelperRule = false
-            return setClosedLid(false) + [.removeHelperRule]
+            let effects = setClosedLid(false)
+            if sleepDisabled == false, !effects.contains(.setSleepDisabled(false)) {
+                return effects + [.removeHelperRule]
+            }
+            removingHelperRule = true
+            return effects
         case .helperRuleRemovalFinished(let outcome):
             switch outcome {
             case .succeeded: helperRule = .notInstalled
@@ -280,6 +292,7 @@ public struct AppState: Equatable, Sendable {
 
     private mutating func setClosedLid(_ on: Bool) -> [Effect] {
         notice = nil
+        if on { removingHelperRule = false }
         if !on { preferences.closedLid = false }
         if on, let refusal = closedLidRefusal {
             preferences.closedLid = false
@@ -340,6 +353,20 @@ public struct AppState: Equatable, Sendable {
         }
         notice = wait == .arming ? .guardianNotRunning : .guardianLost
         return effects
+    }
+
+    /// The rule goes only after a read of 0; the settled read after the turn off ends the wait either way.
+    private mutating func continueRuleRemoval(settled: Bool) -> [Effect] {
+        guard removingHelperRule else { return [] }
+        if sleepDisabled == false {
+            removingHelperRule = false
+            return [.removeHelperRule]
+        }
+        if settled {
+            removingHelperRule = false
+            notice = .ruleKept
+        }
+        return []
     }
 
     private mutating func disarmIfOff() -> [Effect] {

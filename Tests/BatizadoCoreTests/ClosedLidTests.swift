@@ -145,13 +145,13 @@ import Testing
     #expect(reduce(state, .helperRuleInstallFinished(.succeeded)).effects.isEmpty)
 }
 
-@Test func removingTheRuleTurnsClosedLidOffBeforeRemovingIt() throws {
+@Test func removingTheRuleTurnsClosedLidOffAndRemovesTheRuleOnlyOnceSleepReadsEnabled() {
     let (state, effects) = reduce(closedLidOn(), .removeHelperRule)
-
-    let off = try #require(effects.firstIndex(of: .setSleepDisabled(false)))
-    let remove = try #require(effects.firstIndex(of: .removeHelperRule))
-    #expect(off < remove)
+    #expect(effects.contains(.setSleepDisabled(false)))
+    #expect(!effects.contains(.removeHelperRule))
     #expect(state.closedLidRequest == false)
+
+    #expect(reduce(state, .sleepDisabledChanged(false)).effects.contains(.removeHelperRule))
 }
 
 @Test func afterTheRuleIsRemovedClosedLidAsksToInstallAgain() {
@@ -184,4 +184,29 @@ import Testing
     let unknown = reduce(withRule(running(keepAwake: true)), .sleepDisabledChanged(nil)).state
 
     #expect(reduce(unknown, .setKeepAwake(false)).effects.contains(.setSleepDisabled(false)))
+}
+
+@Test func whenClosedLidCannotBeTurnedOffTheRuleIsKeptAndThePopoverSaysWhy() {
+    let removing = reduce(closedLidOn(), .removeHelperRule).state
+    let stillOn = reduce(removing, .sleepDisabledChanged(true))
+    #expect(!stillOn.effects.contains(.removeHelperRule))
+
+    let (state, effects) = reduce(stillOn.state, .sleepDisabledSettled(true))
+
+    #expect(!effects.contains(.removeHelperRule))
+    #expect(state.notice == .ruleKept)
+    #expect(!reduce(state, .sleepDisabledChanged(false)).effects.contains(.removeHelperRule))
+}
+
+@Test func aLateReadOfZeroAfterTheTurnOffStillRemovesTheRule() {
+    let removing = reduce(closedLidOn(), .removeHelperRule).state
+    let lagging = reduce(removing, .sleepDisabledChanged(true)).state
+
+    #expect(reduce(lagging, .sleepDisabledSettled(false)).effects.contains(.removeHelperRule))
+}
+
+@Test func withClosedLidAlreadyOffTheRuleIsRemovedAtOnce() {
+    let off = reduce(withRule(running()), .sleepDisabledChanged(false)).state
+
+    #expect(reduce(off, .removeHelperRule).effects == [.removeHelperRule])
 }

@@ -24,6 +24,8 @@ public enum AppEvent: Equatable, Sendable {
     case helperRuleRemovalFinished(AdministratorOutcome)
     /// The system's `SleepDisabled` was read; nil when the read failed, which is never taken for 0.
     case sleepDisabledChanged(Bool?)
+    /// The read a moment after a `pmset` command, when powerd has applied it; nil when the read failed.
+    case sleepDisabledSettled(Bool?)
     case armingFinished(succeeded: Bool)
     /// The wait for the guardian ended: a live guardian acknowledged this app's armed record, or none did in
     /// time.

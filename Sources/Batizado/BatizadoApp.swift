@@ -154,7 +154,8 @@ struct MenuPanel: View {
             }
             .disabled(model.state.helperRule != .installed)
             .help(
-                "Turns Closed lid off and removes the helper rule. macOS asks for an administrator password.")
+                "Turns Closed lid off, then removes the helper rule once sleep is back on. macOS asks for an administrator password."
+            )
             ActionRow(icon: "xmark.circle", title: "Quit") {
                 NSApplication.shared.terminate(nil)
             }
@@ -219,6 +220,8 @@ extension Notice {
             "Closed lid was on when Batizado quit, but it was not turned back on because the helper rule is not installed. Turn Closed lid on to install it."
         case .guardianNotRunning:
             "Closed lid stayed off: the guardian that turns it off if Batizado stops did not answer. Allow Batizado in System Settings > General > Login Items & Extensions, then quit and reopen Batizado."
+        case .ruleKept:
+            "The helper rule was kept: Closed lid could not be turned off first, and without the rule nothing could turn it off later. Run sudo pmset -a disablesleep 0, then try again."
         case .guardianLost:
             "Closed lid was turned off: the guardian that turns it off if Batizado stops quit and did not come back. Quit and reopen Batizado to start it again."
         }

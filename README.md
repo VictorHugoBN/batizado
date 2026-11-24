@@ -39,7 +39,9 @@ Click the cup in the menu bar. The rows, top to bottom:
   The deadline survives quitting and restarting.
 - **Launch at login**: opens Batizado when you log in.
 - **Sponsor**: opens the GitHub Sponsors page.
-- **Remove helper rule**: turns Closed lid off and removes the helper rule (asks for the password).
+- **Remove helper rule**: turns Closed lid off and, once `SleepDisabled` reads 0 again, removes the helper
+  rule (asks for the password). If Closed lid cannot be turned off, the rule is kept, no password is asked
+  and the menu says why: without the rule nothing could turn it off later.
 - **Quit**: turns off what the app turned on and quits.
 
 The menu bar icon has four states: off, awake, closed lid, and a warning when the real `SleepDisabled` value
