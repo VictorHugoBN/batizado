@@ -15,3 +15,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   launch.
 - Add a read-only Closed lid row and a three-state menu bar icon (off, awake, closed lid) that follow
   the system's real SleepDisabled value as it changes.
+- Add the Closed lid toggle: a one-time helper rule (installed with the administrator password) lets the
+  app toggle `disablesleep`; mismatches, a removed rule and Quit are handled, plus "Remove helper rule".

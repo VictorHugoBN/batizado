@@ -8,6 +8,8 @@ import os
 protocol SleepDisabledSensing {
     /// Reports the current value at once, then again every time the system may have changed it.
     func start(onChange: @escaping @MainActor (Bool) -> Void)
+    /// Reads the value now, without waiting for a change notification.
+    func current() -> Bool
 }
 
 @MainActor
@@ -19,11 +21,11 @@ final class SystemSleepDisabledSensor: SleepDisabledSensing {
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "sleep-disabled")
 
     func start(onChange: @escaping @MainActor (Bool) -> Void) {
-        onChange(read())
+        onChange(current())
         let status = notify_register_dispatch(Self.settingsChanged, &token, .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                onChange(self.read())
+                onChange(self.current())
             }
         }
         if status != NOTIFY_STATUS_OK {
@@ -32,7 +34,7 @@ final class SystemSleepDisabledSensor: SleepDisabledSensing {
     }
 
     // The kernel's root power domain holds the value it actually enforces on lid close.
-    private func read() -> Bool {
+    func current() -> Bool {
         let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
         guard root != IO_OBJECT_NULL else {
             log.error("IOPMrootDomain not found; reporting SleepDisabled as 0")
