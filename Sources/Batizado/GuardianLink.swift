@@ -8,7 +8,8 @@ protocol GuardianLinking {
     /// Writes the armed record for this process and tells the guardian; false if it could not be written.
     func arm(batteryCutoff: Int) -> Bool
     func disarm()
-    /// Reports a reason the guardian left, at once if one is waiting and again each time it records one.
+    /// Reports a reason the guardian left, at once if one is waiting and again each time it records one. The
+    /// note is removed only after `onRecorded` returns, so the handler must have saved what it changed.
     func watchShutdowns(onRecorded: @escaping @MainActor (ShutdownReason) -> Void)
     /// Points the guardian's LaunchAgent at this bundle and makes sure launchd has it loaded.
     func installAgent()
@@ -48,9 +49,11 @@ final class SystemGuardianLink: GuardianLinking {
 
     func watchShutdowns(onRecorded: @escaping @MainActor (ShutdownReason) -> Void) {
         let deliver: @MainActor () -> Void = { [shared, log] in
-            guard let reason = shared.takeShutdown() else { return }
+            guard let reason = shared.readShutdown() else { return }
             log.notice("The guardian recorded a shutdown: \(reason.rawValue, privacy: .public)")
+            // A crash before this line reads the same note again on the next launch, which is harmless.
             onRecorded(reason)
+            shared.removeShutdown(ifStill: reason)
         }
         DarwinNotification.observe(SharedState.shutdownRecorded, handler: deliver)
         deliver()

@@ -115,3 +115,19 @@ private func onBattery(_ percent: Int, _ state: AppState) -> AppState {
     #expect(!restore.contains(.requestNotificationPermission))
     #expect(!refusal.contains(.requestNotificationPermission))
 }
+
+@Test func theSameStickyReasonDeliveredTwiceChangesNothingMoreAndDoesNotNotifyAgain() {
+    let once = reduce(closedLidOn(), .shutdownRecorded(.battery)).state
+
+    let (twice, effects) = reduce(once, .shutdownRecorded(.battery))
+
+    #expect(twice == once)
+    #expect(!effects.contains(.notify(.battery)))
+}
+
+@Test func aSecondProtectionAfterClosedLidWasTurnedBackOnNotifiesAgain() {
+    let once = reduce(closedLidOn(), .shutdownRecorded(.battery)).state
+    let again = reduce(reduce(once, .setClosedLid(true)).state, .armingFinished(succeeded: true)).state
+
+    #expect(reduce(again, .shutdownRecorded(.battery)).effects.contains(.notify(.battery)))
+}

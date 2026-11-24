@@ -50,5 +50,7 @@ struct UserDefaultsPreferences: PreferencesStoring {
         } else {
             defaults.removeObject(forKey: Key.timerDeadline)
         }
+        // Handed to cfprefsd now: a guardian note is removed right after a save and must not outlive it.
+        CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication)
     }
 }

@@ -208,10 +208,12 @@ public struct AppState: Equatable, Sendable {
 
     /// A protection or the timer: Closed lid and Keep awake go off and stay off on the next launch.
     private mutating func turnEverythingOff(because reason: ShutdownReason) -> [Effect] {
+        // The same note read again (the app stopped before removing it) has nothing left to tell.
+        let repeated = lastShutdown == reason && !keepAwake && closedLidRequest != true
         lastShutdown = reason
         let effects = setClosedLid(false)
         preferences.keepAwake = false
-        return effects + [.notify(reason)]
+        return effects + (repeated ? [] : [.notify(reason)])
     }
 
     private mutating func checkTimer(at now: Instant) -> [Effect] {

@@ -48,11 +48,15 @@ public struct SharedState: Sendable {
         try write(ShutdownNote(reason: reason), to: shutdownFile)
     }
 
-    /// Reads the recorded reason and removes it, so it is shown once.
-    public func takeShutdown() -> ShutdownReason? {
-        guard let note = read(ShutdownNote.self, from: shutdownFile) else { return nil }
+    /// The recorded reason, left on disk until the app has acted on it and saved the result.
+    public func readShutdown() -> ShutdownReason? {
+        read(ShutdownNote.self, from: shutdownFile)?.reason
+    }
+
+    /// Removes the note once handled; a different reason written in the meantime stays for the next read.
+    public func removeShutdown(ifStill reason: ShutdownReason) {
+        guard readShutdown() == reason else { return }
         remove(shutdownFile)
-        return note.reason
     }
 
     private func read<Value: Decodable>(_ type: Value.Type, from file: URL) -> Value? {

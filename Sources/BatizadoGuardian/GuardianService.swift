@@ -67,7 +67,11 @@ final class GuardianService {
             do {
                 try shared.writeShutdown(reason)
             } catch {
-                log.error("Could not record the shutdown reason: \(error, privacy: .public)")
+                // Clearing the record without the note would let the app restore after a protection.
+                log.error(
+                    "Could not record the shutdown reason; keeping the armed record: \(error, privacy: .public)"
+                )
+                return false
             }
         case .clearArmed(let record): shared.clearArmed(ifStill: record)
         case .signalApp: DarwinNotification.post(SharedState.shutdownRecorded)
