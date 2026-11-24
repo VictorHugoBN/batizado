@@ -140,8 +140,8 @@ make uninstall    # or: make uninstall INSTALL_DIR=<folder> if you installed els
 ```
 
 It removes the login agent first, quits the app (which turns Closed lid off), waits for the guardian if it
-still has something to revert, unloads and deletes the guardian agent, then deletes
-`~/Library/Application Support/Batizado/`, the preferences and the app.
+still has something to revert, and checks that `SleepDisabled` reads 0. Only then does it unload and delete
+the guardian agent, and delete `~/Library/Application Support/Batizado/`, the preferences and the app.
 
 It never runs `sudo`. If the helper rule is still there, it prints the command to remove it:
 
@@ -149,8 +149,9 @@ It never runs `sudo`. If the helper rule is still there, it prints the command t
 sudo rm -f /etc/sudoers.d/batizado
 ```
 
-If `SleepDisabled` is still 1 at the end, it prints a warning and exits with an error; run
-`sudo pmset -a disablesleep 0` and check `pmset -g | grep SleepDisabled` prints 0.
+If `SleepDisabled` is not a confirmed 0 (still 1, or unreadable), it stops before touching the guardian or
+its state, prints the commands and exits with an error: run `sudo pmset -a disablesleep 0`, check that
+`pmset -g | grep SleepDisabled` prints 0, then run the uninstall again.
 
 macOS may keep Batizado's entry in System Settings > Notifications; remove it there if you want.
 

@@ -55,6 +55,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   (12 s at most, also at launch), and turns off if the guardian quits and does not come back.
 - Fix "Remove helper rule" removing the rule while Closed lid was still on: it removes it only after
   `SleepDisabled` reads 0, and otherwise keeps it and says why.
+- Fix `make uninstall` removing the guardian while `disablesleep` was still on: it stops before that when
+  `SleepDisabled` is not a confirmed 0, prints the commands to run and exits with an error.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

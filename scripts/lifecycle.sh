@@ -26,10 +26,12 @@ HELPER_RULE=/etc/sudoers.d/batizado
 
 is_loaded() { launchctl print "$DOMAIN/$1" >/dev/null 2>&1; }
 is_running() { pgrep -x -U "$UID_NUM" "$1" >/dev/null; }
-sleep_disabled() { pmset -g | awk '$1 == "SleepDisabled" { print $2 }'; }
+# Prints 0 or 1, or nothing when the value cannot be read; only a printed 0 counts as off.
+sleep_disabled() { pmset -g 2>/dev/null | awk '$1 == "SleepDisabled" { print $2 }'; }
 
 app_running() { is_running "$APP_NAME"; }
-armed() { [ -f "$SUPPORT_DIR/armed.json" ]; }
+# The guardian still has something to turn off while either file is there.
+revert_pending() { [ -f "$SUPPORT_DIR/armed.json" ] || [ -f "$SUPPORT_DIR/pending-revert.json" ]; }
 
 # Waits up to $2 tenths of a second for the check $1 to fail; false if it never did.
 wait_while() {
@@ -87,9 +89,28 @@ uninstall() {
   # First nothing may start the app again, then the app turns Closed lid off, then the guardian goes.
   remove_agent "$LOGIN_LABEL"
   quit_app
-  if armed && is_loaded "$GUARDIAN_LABEL"; then
+  if revert_pending && is_loaded "$GUARDIAN_LABEL"; then
     echo "Waiting for the guardian to turn Closed lid off"
-    wait_while armed 50
+    wait_while revert_pending 50
+  fi
+
+  # The guardian and its state are the only thing left that can turn disablesleep off: keep them until 0.
+  local value
+  value="$(sleep_disabled)"
+  if [ "$value" != "0" ]; then
+    cat >&2 <<EOF
+
+!!! Uninstall stopped: SleepDisabled is ${value:-unreadable}, not a confirmed 0.
+!!! The login agent is gone and the app has quit; the guardian and its state were kept so they can
+!!! still turn it off. This Mac may not sleep, even with the lid closed in a bag. Turn it off now:
+!!!
+!!!     sudo pmset -a disablesleep 0
+!!!     pmset -g | grep SleepDisabled      # must print 0
+!!!
+!!! Then run the uninstall again.
+
+EOF
+    return 1
   fi
   remove_agent "$GUARDIAN_LABEL"
   if is_running "$GUARDIAN_NAME"; then
@@ -113,19 +134,7 @@ uninstall() {
     rm -rf "$installed" && echo "Removed $installed"
   fi
 
-  local status=0
   echo
-  if [ "$(sleep_disabled)" = "1" ]; then
-    status=1
-    cat >&2 <<EOF
-!!! WARNING: SleepDisabled is still 1 and no guardian is left to turn it off.
-!!! This Mac will not sleep, even with the lid closed in a bag. Turn it off now:
-!!!
-!!!     sudo pmset -a disablesleep 0
-!!!     pmset -g | grep SleepDisabled      # must print 0
-
-EOF
-  fi
   if [ -e "$HELPER_RULE" ]; then
     cat <<EOF
 The helper rule $HELPER_RULE is still installed. Removing it needs your administrator password
@@ -138,12 +147,7 @@ EOF
   for copy in "${other_copies[@]+"${other_copies[@]}"}"; do
     [ -e "$copy" ] && echo "Another copy of the app is still at $copy; delete it if you no longer want it."
   done
-  if [ "$status" -eq 0 ]; then
-    echo "$APP_NAME is uninstalled."
-  else
-    echo "$APP_NAME is uninstalled, but read the warning above." >&2
-  fi
-  return "$status"
+  echo "$APP_NAME is uninstalled."
 }
 
 case "${1:-}" in
