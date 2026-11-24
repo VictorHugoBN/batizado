@@ -9,6 +9,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-24
+
 - Add the repository scaffold: SwiftPM package (core library, menu bar app, guardian), Makefile,
   bundle script with ad-hoc signing, and a placeholder menu bar icon with a Quit button.
 - Add the Keep awake and Keep display on toggles, backed by power assertions and restored on the next
@@ -33,3 +35,12 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   after a protection, the timer or turning them off; a restore that cannot run says why.
 - Change the look: coffee-toned rows and switches for light and dark mode, four menu bar cup icons (off,
   awake, closed lid, mismatch), clearer wording throughout, and a "Sponsor" row.
+- Add `make uninstall` that removes the app, both LaunchAgents, the shared state and the preferences, and
+  prints the sudo commands still needed for the helper rule or a stuck `disablesleep`.
+- Fix `make run` and `make install` leaving the previous guardian binary running after a rebuild; they now
+  wait for the app to quit and restart the guardian.
+- Change the README to describe what ships: each row, what gets installed and why, the privilege model,
+  protections and limitations.
+
+[Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

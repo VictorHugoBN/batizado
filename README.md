@@ -5,8 +5,10 @@ working while you check on them remotely.
 
 > *Café batizado* is Brazilian for coffee "baptized" with a shot of something stronger.
 
-**Status: pre-alpha.** The repository currently holds the project scaffold: the app shows a menu bar icon
-with a Quit button and nothing else. The features below are the plan for v1, not what is shipped today.
+**Status: 0.1.0, the first release.** It runs on one kind of machine the maintainer owns (an Apple Silicon
+MacBook on macOS 27). The decision logic is unit tested; everything that touches the system (the lid, the
+password prompt, the screen lock, notifications, the protections reverting for real) is checked by hand
+before a release, mostly through debug-only test modes. A real thermal emergency has never been observed.
 
 ## Why
 
@@ -17,58 +19,150 @@ awake until the battery dies or it overheats in a bag, and the setting survives 
 
 Batizado uses `disablesleep` and wraps it in safeguards.
 
-## Planned for v1
+## What the menu does
 
-- **Keep awake**: prevents idle sleep. No privileges, nothing installed.
-- **Closed lid**: turns on `disablesleep`. Asks for your administrator password once, on first use.
-- **Guardian**: a separate user-level process that turns `disablesleep` back off when the battery is low
-  (20% by default), when the system reports serious thermal pressure, or when the app crashes or is killed.
-- **Lock on lid close**: locks the screen when you close the lid, unless an external display is in use.
-- **Auto turn off**: a timer with a five-minute warning and an extend action.
-- The menu bar icon reflects the real `SleepDisabled` state read from the system.
+Click the cup in the menu bar. The rows, top to bottom:
 
-## How the privilege works
+- **Keep awake**: holds a power assertion so the Mac does not idle-sleep while the lid is open. Needs no
+  privileges and installs nothing.
+- **Closed lid**: runs `pmset -a disablesleep 1`, so the Mac stays awake with the lid closed, on AC or on
+  battery. Turning it on also turns Keep awake on. The switch shows the real `SleepDisabled` value read from
+  the system, not what the app asked for; if the two disagree, the menu bar icon shows a warning. The first
+  time, it asks for your administrator password once to install the helper rule (see below).
+- **Keep display on**: keeps the display from sleeping too, while Keep awake is on.
+- **Lock on lid close** (on by default): with Closed lid on, closing the lid locks the screen, unless an
+  external display is in use. Unplugging the last external display with the lid closed also locks.
+- **Low battery cutoff** (20% by default, 5% to 50%): with Closed lid on, on battery, at or below this level,
+  Closed lid and Keep awake are turned off. Never while charging.
+- **Auto turn off** (Never, 1, 2, 4 or 8 hours): turns Keep awake and Closed lid off after that long. A
+  notification five minutes before offers "Extend 30 min"; the menu shows the countdown and the same button.
+  The deadline survives quitting and restarting.
+- **Launch at login**: opens Batizado when you log in.
+- **Sponsor**: opens the GitHub Sponsors page.
+- **Remove helper rule**: turns Closed lid off and removes the helper rule (asks for the password).
+- **Quit**: turns off what the app turned on and quits.
 
-Nothing in this project runs as root. On first use of *Closed lid*, the app installs a `sudoers` rule that
-lets your user run exactly two commands without a password:
+The menu bar icon has four states: off, awake, closed lid, and a warning when the real `SleepDisabled` value
+differs from what you asked for.
+
+When you open Batizado again after Quit, a crash or a restart, Keep awake and Closed lid come back as you
+left them. They do not come back after a protection, the timer or turning them off yourself.
+
+## Protections
+
+A separate guardian process watches the app and the Mac while Closed lid is on. It turns `disablesleep` back
+off when:
+
+- the battery reaches the Low battery cutoff while on battery;
+- macOS reports a serious or critical thermal state;
+- the app crashes or is killed (`kill -9`);
+- the Mac restarted with Closed lid on (the setting survives a reboot; the guardian turns it off when you log
+  in).
+
+After a battery, thermal or timer shutdown, Closed lid and Keep awake stay off until you turn them on again,
+the app sends a notification and the menu says why. Closed lid refuses to turn on while the battery is at
+the cutoff or the Mac is too hot. After a crash or a restart, the menu says what happened and the app turns
+Closed lid back on the next time it opens.
+
+The guardian only reverts what the app armed: a `disablesleep 1` you set yourself in a terminal is left alone.
+
+## What gets installed, and why a password is asked once
+
+Nothing in this project runs as root. Everything below is created by the app as your user, except the helper
+rule.
+
+| What | Where | When |
+| --- | --- | --- |
+| The app (with the guardian inside it) | `/Applications/Batizado.app` | `make install` |
+| Helper rule | `/etc/sudoers.d/batizado` | first time you turn Closed lid on (password) |
+| Guardian LaunchAgent | `~/Library/LaunchAgents/io.github.victorhugobn.batizado.guardian.plist` | every time the app opens |
+| Login LaunchAgent | `~/Library/LaunchAgents/io.github.victorhugobn.batizado.login.plist` | when Launch at login is on |
+| Shared state | `~/Library/Application Support/Batizado/` | while Closed lid is on, and after a shutdown |
+| Preferences | the `io.github.victorhugobn.batizado` defaults domain | when you change a toggle |
+
+**The helper rule.** Changing `disablesleep` needs root. Instead of a root daemon, the app asks once, through
+the standard macOS password window, to install this file (owned by root, mode 0440, validated with
+`visudo -c` before it is moved into place), where `you` is your short user name:
 
 ```
-/usr/bin/pmset -a disablesleep 0
-/usr/bin/pmset -a disablesleep 1
+# Installed by Batizado. Lets one user toggle pmset disablesleep, nothing else.
+you ALL = (root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
 ```
 
-The rule is validated before it is installed and can be removed from the app's menu. The trade-off is that
-any process running as your user can toggle `disablesleep`.
+From then on the app runs `/usr/bin/sudo -n /usr/bin/pmset -a disablesleep 0` or `1`, and the guardian only
+the `0`, always with fixed arguments and never asking for a password again. Check what the rule allows with `sudo -l`.
 
-## Requirements
+**The accepted risk.** Any process running as your user can run those two commands without a password. The
+worst it can do is keep your Mac from sleeping, or let it sleep. Remove the rule with "Remove helper rule" when
+you stop using Closed lid.
 
-- Apple Silicon Mac, macOS 14 or later (developed and tested on macOS 27)
+**The LaunchAgents** are plain plists, not `SMAppService` items (ad-hoc signed apps lose that registration on
+every rebuild). The guardian agent starts the guardian at login and restarts it if it dies; it is loaded even
+while Closed lid is off, so it can clean up after a restart without the app. The login agent runs
+`/usr/bin/open` on the app once at login. macOS may show a "Background Items Added" notice for them.
+
+## Install from source
+
+There are no prebuilt binaries. Requirements:
+
+- Apple Silicon Mac, macOS 14 or later
 - Xcode 27 with its license accepted (`sudo xcodebuild -license accept`). The Makefile selects the Xcode
-  toolchain by itself; you do not need to change `xcode-select`.
-
-## Build from source
-
-There are no prebuilt binaries: the app is signed ad hoc, without a Developer ID.
+  toolchain itself; you do not need to change `xcode-select`.
 
 ```sh
 git clone https://github.com/VictorHugoBN/batizado.git
 cd batizado
 make install      # builds, signs ad hoc and copies Batizado.app to /Applications
+open /Applications/Batizado.app
 ```
 
-Other targets:
+`make install` over an existing copy quits it first (which turns Closed lid off) and restarts the guardian, so
+the new guardian binary runs right away. Open the app again afterwards. `make install INSTALL_DIR=<folder>`
+installs somewhere else.
+
+## Uninstall
+
+First click **Remove helper rule** in the menu (it needs your password). Then, from the repository:
 
 ```sh
-make help         # list every target
-make run          # build and launch from ./build
-make check        # lint, build and test
-make uninstall    # quit the app and remove it from /Applications
+make uninstall    # or: make uninstall INSTALL_DIR=<folder> if you installed elsewhere
 ```
+
+It removes the login agent first, quits the app (which turns Closed lid off), waits for the guardian if it
+still has something to revert, unloads and deletes the guardian agent, then deletes
+`~/Library/Application Support/Batizado/`, the preferences and the app.
+
+It never runs `sudo`. If the helper rule is still there, it prints the command to remove it:
+
+```sh
+sudo rm -f /etc/sudoers.d/batizado
+```
+
+If `SleepDisabled` is still 1 at the end, it prints a warning and exits with an error; run
+`sudo pmset -a disablesleep 0` and check `pmset -g | grep SleepDisabled` prints 0.
+
+macOS may keep Batizado's entry in System Settings > Notifications; remove it there if you want.
+
+## Limitations
+
+- **No protection outside your login session.** The guardian is a user LaunchAgent. After you log out, and
+  between boot and login, nothing turns `disablesleep` off: if the Mac restarts with Closed lid on, it will
+  not sleep until you log in.
+- With Closed lid on, the "Sleep" item in the Apple menu is unavailable; that is what `disablesleep` does.
+- Apple Silicon only. macOS 14 or later, but tested on macOS 27 only.
+- Signed ad hoc, with no Developer ID: build it yourself from source. Gatekeeper may warn if you copy the app
+  to another Mac.
+- The screen lock uses `SACLockScreenImmediate` from the private `login.framework`. A future macOS may remove
+  it; the app logs when it is unavailable. As a fallback, `defaults write io.github.victorhugobn.batizado
+  lockMechanism displaySleep` sleeps the display instead, which only locks if "Require password" is set to
+  "Immediately".
+- The battery and thermal protections need the guardian; the timer runs in the app only.
 
 ## Contributing
 
 `AGENTS.md` describes the project layout, rules and feedback loops for both humans and coding agents. Run
-`make setup` once to install the pre-commit hooks, and `make check` before every commit.
+`make setup` once to install the pre-commit hooks, and `make check` (lint, build and tests) before every
+commit. `make help` lists every target.
 
 ## Sponsor
 
