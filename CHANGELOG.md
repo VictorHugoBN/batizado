@@ -13,3 +13,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   bundle script with ad-hoc signing, and a placeholder menu bar icon with a Quit button.
 - Add the Keep awake and Keep display on toggles, backed by power assertions and restored on the next
   launch.
+- Add a read-only Closed lid row and a three-state menu bar icon (off, awake, closed lid) that follow
+  the system's real SleepDisabled value as it changes.

@@ -16,6 +16,8 @@ public struct Preferences: Hashable, Sendable {
 public struct AppState: Equatable, Sendable {
     public private(set) var preferences: Preferences
     var isRunning = false
+    /// The system's `SleepDisabled` as last read by a sensor, never what the app asked for.
+    public private(set) var sleepDisabled = false
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -34,6 +36,7 @@ public struct AppState: Equatable, Sendable {
         case .launched: isRunning = true
         case .setKeepAwake(let on): preferences.keepAwake = on
         case .setKeepDisplayOn(let on): preferences.keepDisplayOn = on
+        case .sleepDisabledChanged(let disabled): sleepDisabled = disabled
         case .quit: isRunning = false
         }
     }

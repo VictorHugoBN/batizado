@@ -2,6 +2,7 @@ public enum AppEvent: Equatable, Sendable {
     case launched
     case setKeepAwake(Bool)
     case setKeepDisplayOn(Bool)
+    case sleepDisabledChanged(Bool)
     case quit
 }
 

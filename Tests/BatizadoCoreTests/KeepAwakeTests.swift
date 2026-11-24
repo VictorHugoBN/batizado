@@ -84,8 +84,3 @@ private func assertionEffects(_ effects: [Effect]) -> Set<Effect> {
             }
         })
 }
-
-private func running(keepAwake: Bool = false, keepDisplayOn: Bool = false) -> AppState {
-    reduce(AppState(preferences: Preferences(keepAwake: keepAwake, keepDisplayOn: keepDisplayOn)), .launched)
-        .state
-}
