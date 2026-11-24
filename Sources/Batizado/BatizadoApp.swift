@@ -71,6 +71,16 @@ struct MenuPanel: View {
                 )
             )
             .disabled(!model.state.keepAwake)
+            ToggleRow(
+                icon: "lock.laptopcomputer",
+                title: "Lock on lid close",
+                isOn: Binding(
+                    get: { model.state.lockOnLidClose },
+                    set: { model.send(.setLockOnLidClose($0)) }
+                )
+            )
+            .help(
+                "With Closed lid on, locks the screen when the lid closes and no external display is active.")
             Divider()
             Button("Remove helper rule") {
                 model.send(.removeHelperRule)

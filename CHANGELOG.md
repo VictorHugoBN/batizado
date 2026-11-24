@@ -19,3 +19,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   app toggle `disablesleep`; mismatches, a removed rule and Quit are handled, plus "Remove helper rule".
 - Add the guardian LaunchAgent: it turns Closed lid off when the app crashes or is force quit, and the app
   shows why on the next launch and turns Closed lid back on.
+- Add "Lock on lid close" (on by default): with Closed lid on, closing the lid without an external display
+  locks the screen.

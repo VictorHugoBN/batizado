@@ -6,10 +6,12 @@ public enum PowerAssertion: Hashable, Sendable, CaseIterable {
 public struct Preferences: Hashable, Sendable {
     public var keepAwake: Bool
     public var keepDisplayOn: Bool
+    public var lockOnLidClose: Bool
 
-    public init(keepAwake: Bool = false, keepDisplayOn: Bool = false) {
+    public init(keepAwake: Bool = false, keepDisplayOn: Bool = false, lockOnLidClose: Bool = true) {
         self.keepAwake = keepAwake
         self.keepDisplayOn = keepDisplayOn
+        self.lockOnLidClose = lockOnLidClose
     }
 }
 
@@ -48,6 +50,9 @@ public struct AppState: Equatable, Sendable {
     var awaitingHelperRule = false
     /// The armed record is on disk, so the guardian reverts if this process dies.
     var armed = false
+    /// Nil until the lid sensor first reports, so a lid already closed at launch is not a closing.
+    var lidClosed: Bool?
+    var externalDisplay = false
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -55,6 +60,7 @@ public struct AppState: Equatable, Sendable {
 
     public var keepAwake: Bool { preferences.keepAwake }
     public var keepDisplayOn: Bool { preferences.keepDisplayOn }
+    public var lockOnLidClose: Bool { preferences.lockOnLidClose }
 
     /// The system's real `SleepDisabled` differs from what the app last asked for.
     public var closedLidDiverged: Bool {
@@ -75,6 +81,7 @@ public struct AppState: Equatable, Sendable {
             if !on, closedLidRequest == true || sleepDisabled { return setClosedLid(false) }
         case .setKeepDisplayOn(let on): preferences.keepDisplayOn = on
         case .setClosedLid(let on): return setClosedLid(on)
+        case .setLockOnLidClose(let on): preferences.lockOnLidClose = on
         case .sleepDisabledChanged(let disabled):
             sleepDisabled = disabled
             if !disabled { return disarmIfOff() }
@@ -85,6 +92,14 @@ public struct AppState: Equatable, Sendable {
             lastShutdown = reason
             guard !reason.isSticky, helperRule == .installed, closedLidRequest != true else { return [] }
             return setClosedLid(true)
+        case .lidChanged(let closed):
+            let before = unattended
+            lidClosed = closed
+            return lockIfLeftUnattended(before)
+        case .externalDisplayChanged(let active):
+            let before = unattended
+            externalDisplay = active
+            return lockIfLeftUnattended(before)
         case .helperRuleChecked(let installed): ruleChecked(installed: installed)
         case .reinstallHelperRule:
             notice = nil
@@ -109,6 +124,15 @@ public struct AppState: Equatable, Sendable {
             }
         }
         return []
+    }
+
+    /// The lid is closed and no external display is active; nil until the lid sensor first reports.
+    private var unattended: Bool? { lidClosed.map { $0 && !externalDisplay } }
+
+    /// Locks on the change into unattended only, so a lid already closed when first read is not a closing.
+    private func lockIfLeftUnattended(_ before: Bool?) -> [Effect] {
+        guard before == false, unattended == true else { return [] }
+        return sleepDisabled && lockOnLidClose ? [.lockScreen] : []
     }
 
     private mutating func setClosedLid(_ on: Bool) -> [Effect] {

@@ -3,6 +3,7 @@ public enum AppEvent: Equatable, Sendable {
     case setKeepAwake(Bool)
     case setKeepDisplayOn(Bool)
     case setClosedLid(Bool)
+    case setLockOnLidClose(Bool)
     case helperRuleChecked(installed: Bool)
     case reinstallHelperRule
     case helperRuleInstallFinished(AdministratorOutcome)
@@ -14,6 +15,10 @@ public enum AppEvent: Equatable, Sendable {
     case sleepDisabledSwitched(Bool)
     /// The guardian turned the mode off (or found it off) and left this reason for the app.
     case shutdownRecorded(ShutdownReason)
+    /// The built-in display's lid opened or closed, or its state was read at launch.
+    case lidChanged(closed: Bool)
+    /// At least one display other than the built-in one is active, or none is.
+    case externalDisplayChanged(active: Bool)
     case quit
 }
 
@@ -31,6 +36,8 @@ public enum Effect: Hashable, Sendable {
     case arm
     /// Remove the armed record and tell the guardian, once `disablesleep` is confirmed off.
     case disarm
+    /// Lock the screen now, without sleeping the display or the Mac.
+    case lockScreen
 }
 
 public func reduce(_ state: AppState, _ event: AppEvent) -> (state: AppState, effects: [Effect]) {

@@ -12,6 +12,7 @@ struct UserDefaultsPreferences: PreferencesStoring {
     private enum Key {
         static let keepAwake = "keepAwake"
         static let keepDisplayOn = "keepDisplayOn"
+        static let lockOnLidClose = "lockOnLidClose"
     }
 
     private let defaults = UserDefaults.standard
@@ -19,12 +20,14 @@ struct UserDefaultsPreferences: PreferencesStoring {
     func load() -> Preferences {
         Preferences(
             keepAwake: defaults.bool(forKey: Key.keepAwake),
-            keepDisplayOn: defaults.bool(forKey: Key.keepDisplayOn)
+            keepDisplayOn: defaults.bool(forKey: Key.keepDisplayOn),
+            lockOnLidClose: defaults.object(forKey: Key.lockOnLidClose) as? Bool ?? true
         )
     }
 
     func save(_ preferences: Preferences) {
         defaults.set(preferences.keepAwake, forKey: Key.keepAwake)
         defaults.set(preferences.keepDisplayOn, forKey: Key.keepDisplayOn)
+        defaults.set(preferences.lockOnLidClose, forKey: Key.lockOnLidClose)
     }
 }

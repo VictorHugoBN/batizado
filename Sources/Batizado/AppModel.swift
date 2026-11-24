@@ -12,6 +12,7 @@ final class AppModel {
     private let sleepSwitch: any SleepDisabledSwitching
     private let helperRule: any HelperRuleManaging
     private let guardian: any GuardianLinking
+    private let screenLock: any ScreenLocking
 
     init(
         assertions: any PowerAssertionHolding = SystemPowerAssertions(),
@@ -19,7 +20,10 @@ final class AppModel {
         sleepDisabled: any SleepDisabledSensing = SystemSleepDisabledSensor(),
         sleepSwitch: any SleepDisabledSwitching = SudoSleepDisabledSwitch(),
         helperRule: any HelperRuleManaging = SystemHelperRule(),
-        guardian: any GuardianLinking = SystemGuardianLink()
+        guardian: any GuardianLinking = SystemGuardianLink(),
+        lid: any LidSensing = SystemLidSensor(),
+        displays: any ExternalDisplaySensing = SystemExternalDisplaySensor(),
+        screenLock: any ScreenLocking = systemScreenLock()
     ) {
         self.assertions = assertions
         self.preferences = preferences
@@ -27,6 +31,7 @@ final class AppModel {
         self.sleepSwitch = sleepSwitch
         self.helperRule = helperRule
         self.guardian = guardian
+        self.screenLock = screenLock
         state = AppState(preferences: preferences.load())
         send(.launched)
         send(.helperRuleChecked(installed: helperRule.isInstalled()))
@@ -34,6 +39,8 @@ final class AppModel {
         helperRule.watch { [weak self] in self?.send(.helperRuleChecked(installed: $0)) }
         guardian.installAgent()
         guardian.watchShutdowns { [weak self] in self?.send(.shutdownRecorded($0)) }
+        displays.start { [weak self] in self?.send(.externalDisplayChanged(active: $0)) }
+        lid.start { [weak self] in self?.send(.lidChanged(closed: $0)) }
     }
 
     func send(_ event: AppEvent) {
@@ -63,6 +70,7 @@ final class AppModel {
         case .removeHelperRule: send(.helperRuleRemovalFinished(helperRule.remove()))
         case .arm: send(.armingFinished(succeeded: guardian.arm()))
         case .disarm: guardian.disarm()
+        case .lockScreen: _ = screenLock.lock()
         }
     }
 }
