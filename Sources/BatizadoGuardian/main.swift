@@ -1,4 +1,6 @@
-import BatizadoCore
+import Foundation
 
-// Placeholder: the guardian does not watch anything yet.
-print("\(AppInfo.guardianIdentifier): nothing to guard yet")
+let guardian = GuardianService()
+guardian.start()
+// Not dispatchMain(): it parks the main thread, and main-queue handlers then fail the MainActor check.
+RunLoop.main.run()

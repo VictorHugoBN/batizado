@@ -11,24 +11,29 @@ final class AppModel {
     private let sleepDisabled: any SleepDisabledSensing
     private let sleepSwitch: any SleepDisabledSwitching
     private let helperRule: any HelperRuleManaging
+    private let guardian: any GuardianLinking
 
     init(
         assertions: any PowerAssertionHolding = SystemPowerAssertions(),
         preferences: any PreferencesStoring = UserDefaultsPreferences(),
         sleepDisabled: any SleepDisabledSensing = SystemSleepDisabledSensor(),
         sleepSwitch: any SleepDisabledSwitching = SudoSleepDisabledSwitch(),
-        helperRule: any HelperRuleManaging = SystemHelperRule()
+        helperRule: any HelperRuleManaging = SystemHelperRule(),
+        guardian: any GuardianLinking = SystemGuardianLink()
     ) {
         self.assertions = assertions
         self.preferences = preferences
         self.sleepDisabled = sleepDisabled
         self.sleepSwitch = sleepSwitch
         self.helperRule = helperRule
+        self.guardian = guardian
         state = AppState(preferences: preferences.load())
         send(.launched)
         send(.helperRuleChecked(installed: helperRule.isInstalled()))
         sleepDisabled.start { [weak self] in self?.send(.sleepDisabledChanged($0)) }
         helperRule.watch { [weak self] in self?.send(.helperRuleChecked(installed: $0)) }
+        guardian.installAgent()
+        guardian.watchShutdowns { [weak self] in self?.send(.shutdownRecorded($0)) }
     }
 
     func send(_ event: AppEvent) {
@@ -44,6 +49,7 @@ final class AppModel {
         case .save(let toggles): preferences.save(toggles)
         case .setSleepDisabled(let disabled):
             let ran = sleepSwitch.set(disabled)
+            if ran { send(.sleepDisabledSwitched(disabled)) }
             // Read back at once: the change notification is not guaranteed to arrive.
             send(.sleepDisabledChanged(sleepDisabled.current()))
             if !ran { send(.helperRuleChecked(installed: helperRule.isInstalled())) }
@@ -55,6 +61,8 @@ final class AppModel {
             }
         case .installHelperRule: send(.helperRuleInstallFinished(helperRule.install()))
         case .removeHelperRule: send(.helperRuleRemovalFinished(helperRule.remove()))
+        case .arm: send(.armingFinished(succeeded: guardian.arm()))
+        case .disarm: guardian.disarm()
         }
     }
 }

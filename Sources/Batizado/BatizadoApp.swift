@@ -105,7 +105,11 @@ private struct ClosedLidStatus: View {
         switch state.notice {
         case .installFailed(let message): warning("Could not install the helper rule: \(message)")
         case .removeFailed(let message): warning("Could not remove the helper rule: \(message)")
+        case .armFailed: warning("Closed lid stayed off: the guardian could not be armed.")
         case nil: EmptyView()
+        }
+        if let reason = state.lastShutdown {
+            warning(reason.explanation + (state.closedLidRequest == true ? " It was turned back on." : ""))
         }
     }
 
@@ -114,6 +118,19 @@ private struct ClosedLidStatus: View {
             .font(.caption)
             .foregroundStyle(.orange)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension ShutdownReason {
+    fileprivate var explanation: String {
+        switch self {
+        case .appDied: "Closed lid was turned off because Batizado stopped unexpectedly."
+        case .reboot: "Closed lid was turned off because the Mac restarted with it on."
+        case .battery: "Closed lid was turned off because the battery ran low."
+        case .thermal: "Closed lid was turned off because the Mac got too hot."
+        case .timer: "Closed lid was turned off because the timer ran out."
+        case .user, .quit: "Closed lid was turned off."
+        }
     }
 }
 

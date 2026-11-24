@@ -11,5 +11,6 @@ func withRule(_ state: AppState) -> AppState {
 
 func closedLidOn() -> AppState {
     let asked = reduce(withRule(running()), .setClosedLid(true)).state
-    return reduce(asked, .sleepDisabledChanged(true)).state
+    let armed = reduce(asked, .armingFinished(succeeded: true)).state
+    return reduce(armed, .sleepDisabledChanged(true)).state
 }

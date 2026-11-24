@@ -6,8 +6,8 @@ import Testing
     let (state, effects) = reduce(withRule(running()), .setClosedLid(true))
 
     #expect(state.keepAwake)
-    #expect(effects.contains(.setSleepDisabled(true)))
     #expect(effects.contains(.hold(.systemIdle)))
+    #expect(reduce(state, .armingFinished(succeeded: true)).effects.contains(.setSleepDisabled(true)))
 }
 
 @Test func closedLidWithoutTheRuleAsksToInstallItAndChangesNothingYet() {
@@ -20,11 +20,11 @@ import Testing
 @Test func installingTheRuleFinishesTurningClosedLidOn() {
     let asked = reduce(running(), .setClosedLid(true)).state
 
-    let (state, effects) = reduce(asked, .helperRuleInstallFinished(.succeeded))
+    let (state, _) = reduce(asked, .helperRuleInstallFinished(.succeeded))
 
     #expect(state.helperRule == .installed)
     #expect(state.keepAwake)
-    #expect(effects.contains(.setSleepDisabled(true)))
+    #expect(reduce(state, .armingFinished(succeeded: true)).effects.contains(.setSleepDisabled(true)))
 }
 
 @Test func cancellingThePasswordWindowLeavesEverythingOff() {
@@ -85,7 +85,10 @@ import Testing
 }
 
 @Test func sleepStillEnabledAfterAskingForClosedLidIsADivergence() {
-    let asked = reduce(withRule(running()), .setClosedLid(true)).state
+    let asked = reduce(
+        reduce(withRule(running()), .setClosedLid(true)).state, .armingFinished(succeeded: true)
+    )
+    .state
 
     let (state, _) = reduce(asked, .sleepDisabledChanged(false))
 

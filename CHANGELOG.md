@@ -17,3 +17,5 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   the system's real SleepDisabled value as it changes.
 - Add the Closed lid toggle: a one-time helper rule (installed with the administrator password) lets the
   app toggle `disablesleep`; mismatches, a removed rule and Quit are handled, plus "Remove helper rule".
+- Add the guardian LaunchAgent: it turns Closed lid off when the app crashes or is force quit, and the app
+  shows why on the next launch and turns Closed lid back on.

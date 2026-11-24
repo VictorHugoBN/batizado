@@ -30,6 +30,8 @@ public enum AdministratorOutcome: Equatable, Sendable {
 public enum Notice: Equatable, Sendable {
     case installFailed(String)
     case removeFailed(String)
+    /// The armed record could not be written, so Closed lid stayed off.
+    case armFailed
 }
 
 public struct AppState: Equatable, Sendable {
@@ -41,7 +43,11 @@ public struct AppState: Equatable, Sendable {
     /// What the app last asked `disablesleep` to be in this session; nil until it asks.
     public private(set) var closedLidRequest: Bool?
     public private(set) var notice: Notice?
+    /// Why the guardian last turned the mode off, shown until the app quits.
+    public private(set) var lastShutdown: ShutdownReason?
     var awaitingHelperRule = false
+    /// The armed record is on disk, so the guardian reverts if this process dies.
+    var armed = false
 
     public init(preferences: Preferences = Preferences()) {
         self.preferences = preferences
@@ -69,7 +75,16 @@ public struct AppState: Equatable, Sendable {
             if !on, closedLidRequest == true || sleepDisabled { return setClosedLid(false) }
         case .setKeepDisplayOn(let on): preferences.keepDisplayOn = on
         case .setClosedLid(let on): return setClosedLid(on)
-        case .sleepDisabledChanged(let disabled): sleepDisabled = disabled
+        case .sleepDisabledChanged(let disabled):
+            sleepDisabled = disabled
+            if !disabled { return disarmIfOff() }
+        case .armingFinished(let succeeded): return armingFinished(succeeded: succeeded)
+        case .sleepDisabledSwitched(let disabled):
+            if !disabled { return disarmIfOff() }
+        case .shutdownRecorded(let reason):
+            lastShutdown = reason
+            guard !reason.isSticky, helperRule == .installed, closedLidRequest != true else { return [] }
+            return setClosedLid(true)
         case .helperRuleChecked(let installed): ruleChecked(installed: installed)
         case .reinstallHelperRule:
             notice = nil
@@ -105,8 +120,25 @@ public struct AppState: Equatable, Sendable {
         }
         guard on || closedLidRequest == true || sleepDisabled else { return [] }
         closedLidRequest = on
-        if on { preferences.keepAwake = true }
-        return [.setSleepDisabled(on)]
+        guard on else { return [.setSleepDisabled(false)] }
+        preferences.keepAwake = true
+        return armed ? [.setSleepDisabled(true)] : [.arm]
+    }
+
+    private mutating func armingFinished(succeeded: Bool) -> [Effect] {
+        guard succeeded else {
+            if closedLidRequest == true { closedLidRequest = nil }
+            notice = .armFailed
+            return []
+        }
+        armed = true
+        return closedLidRequest == true ? [.setSleepDisabled(true)] : disarmIfOff()
+    }
+
+    private mutating func disarmIfOff() -> [Effect] {
+        guard armed, closedLidRequest != true else { return [] }
+        armed = false
+        return [.disarm]
     }
 
     private mutating func ruleChecked(installed: Bool) {

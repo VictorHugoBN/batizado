@@ -9,9 +9,11 @@ a `CLAUDE.md` or `CLAUDE.local.md`: either one stops Claude Code from reading th
 
 ## Project Structure
 
-- `Package.swift` — one package, four targets
+- `Package.swift` — one package, five targets
 - `Sources/BatizadoCore/` — pure logic shared by the app and the guardian (policies, state machine, text
   generators). No AppKit, IOKit, file I/O or process spawning here
+- `Sources/BatizadoSystem/` — thin system adapters both executables need (shared state files in
+  `~/Library/Application Support/Batizado/`, process identity, `SleepDisabled`). No decisions here
 - `Sources/Batizado/` — the menu bar app (SwiftUI `MenuBarExtra`, window style)
 - `Sources/BatizadoGuardian/` — the watchdog executable, shipped inside the app bundle
 - `Tests/BatizadoCoreTests/` — unit tests for the core (Swift Testing)

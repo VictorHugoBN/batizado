@@ -9,6 +9,11 @@ public enum AppEvent: Equatable, Sendable {
     case removeHelperRule
     case helperRuleRemovalFinished(AdministratorOutcome)
     case sleepDisabledChanged(Bool)
+    case armingFinished(succeeded: Bool)
+    /// One of the two allowed `pmset` commands exited cleanly.
+    case sleepDisabledSwitched(Bool)
+    /// The guardian turned the mode off (or found it off) and left this reason for the app.
+    case shutdownRecorded(ShutdownReason)
     case quit
 }
 
@@ -22,6 +27,10 @@ public enum Effect: Hashable, Sendable {
     case installHelperRule
     /// Remove `HelperRule.path` through the administrator password window.
     case removeHelperRule
+    /// Write the armed record and tell the guardian, then report `armingFinished`; nothing goes on before.
+    case arm
+    /// Remove the armed record and tell the guardian, once `disablesleep` is confirmed off.
+    case disarm
 }
 
 public func reduce(_ state: AppState, _ event: AppEvent) -> (state: AppState, effects: [Effect]) {

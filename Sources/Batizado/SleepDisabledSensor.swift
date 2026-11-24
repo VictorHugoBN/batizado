@@ -1,6 +1,6 @@
 import BatizadoCore
+import BatizadoSystem
 import Foundation
-import IOKit
 import notify
 import os
 
@@ -33,22 +33,7 @@ final class SystemSleepDisabledSensor: SleepDisabledSensing {
         }
     }
 
-    // The kernel's root power domain holds the value it actually enforces on lid close.
     func current() -> Bool {
-        let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
-        guard root != IO_OBJECT_NULL else {
-            log.error("IOPMrootDomain not found; reporting SleepDisabled as 0")
-            return false
-        }
-        defer { IOObjectRelease(root) }
-        let value = IORegistryEntryCreateCFProperty(
-            root, "SleepDisabled" as CFString, kCFAllocatorDefault, 0)?
-            .takeRetainedValue()
-        guard let disabled = value as? Bool else {
-            log.error("IOPMrootDomain has no SleepDisabled; reporting 0")
-            return false
-        }
-        log.info("SleepDisabled is \(disabled ? 1 : 0)")
-        return disabled
+        SystemFacts.sleepDisabled
     }
 }
