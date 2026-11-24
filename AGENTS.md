@@ -98,11 +98,17 @@ Built only with `make run CONFIG=debug` (`#if DEBUG`); release binaries contain 
 - Timer: "5 min 20 s (timer test)" in Auto turn off (warning after 20 s).
 - Launch at login without clicking: `notifyutil -p io.github.victorhugobn.batizado.debug-launch-at-login-on`
   (or `-off`).
+- Closed lid without sudo: launch with `open --env BATIZADO_DEBUG_DRY_HELPER=1 build/Batizado.app`. The
+  helper rule then reads as installed and both `pmset` commands are only logged (category `dry-helper`);
+  `notifyutil -p io.github.victorhugobn.batizado.debug-closed-lid-on` (or `-off`) acts like the toggle. The
+  hooks exist only with that variable set, so the real rule's password window can never open from them.
 - Popover screenshots without touching the system:
   `"$(swift build -c debug --show-bin-path)/Batizado" --write-snapshots <dir>`.
 
 Without the helper rule, the guardian can be exercised by writing `armed.json` by hand (an `ArmedRecord`
-naming the app's pid and start time) and posting `io.github.victorhugobn.batizado.armed-changed`. A guardian
+naming the app's pid and start time) and posting `io.github.victorhugobn.batizado.armed-changed`; a running
+guardian answers in `acknowledged.json` with the record and its own pid and start time, which is what the app
+waits for (12 s at most) before it turns `disablesleep` on. A guardian
 from an older build keeps running until `make run`, `make install` or
 `launchctl kickstart -k gui/$UID/io.github.victorhugobn.batizado.guardian`. In every build, the hidden
 default `lockMechanism` set to `displaySleep` swaps the screen lock for `pmset displaysleepnow`.

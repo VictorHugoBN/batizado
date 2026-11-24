@@ -25,6 +25,11 @@ public enum AppEvent: Equatable, Sendable {
     /// The system's `SleepDisabled` was read; nil when the read failed, which is never taken for 0.
     case sleepDisabledChanged(Bool?)
     case armingFinished(succeeded: Bool)
+    /// The wait for the guardian ended: a live guardian acknowledged this app's armed record, or none did in
+    /// time.
+    case acknowledgementFinished(received: Bool)
+    /// The guardian process that acknowledged the armed record exited.
+    case guardianExited
     /// One of the two allowed `pmset` commands exited cleanly.
     case sleepDisabledSwitched(Bool)
     /// The guardian turned the mode off (or found it off) and left this reason for the app.
@@ -48,6 +53,9 @@ public enum Effect: Hashable, Sendable {
     case removeHelperRule
     /// Write the armed record and tell the guardian, then report `armingFinished`; nothing goes on before.
     case arm(batteryCutoff: Int)
+    /// Wait up to `GuardianTiming.acknowledgementWait` seconds for a live guardian to acknowledge the armed
+    /// record, then report `acknowledgementFinished`; a later wait or a disarm replaces this one.
+    case awaitAcknowledgement
     /// Rewrite the armed record with a new cutoff and tell the guardian; Closed lid stays as it is.
     case updateArmed(batteryCutoff: Int)
     /// Remove the armed record and tell the guardian, once `disablesleep` is confirmed off.

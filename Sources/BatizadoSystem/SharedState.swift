@@ -7,6 +7,8 @@ import os
 public struct SharedState: Sendable {
     /// Posted by the app after it writes or removes the armed record.
     public static let armedChanged = AppInfo.bundleIdentifier + ".armed-changed"
+    /// Posted by the guardian after it acknowledges the armed record.
+    public static let acknowledged = AppInfo.bundleIdentifier + ".armed-acknowledged"
     /// Posted by the guardian after it records why the mode went off.
     public static let shutdownRecorded = AppInfo.bundleIdentifier + ".shutdown-recorded"
 
@@ -18,6 +20,7 @@ public struct SharedState: Sendable {
     private var armedFile: URL { directory.appending(path: "armed.json") }
     private var shutdownFile: URL { directory.appending(path: "last-shutdown.json") }
     private var pendingFile: URL { directory.appending(path: "pending-revert.json") }
+    private var acknowledgementFile: URL { directory.appending(path: "acknowledged.json") }
     private let log = Logger(subsystem: AppInfo.bundleIdentifier, category: "shared-state")
 
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser) {
@@ -43,6 +46,14 @@ public struct SharedState: Sendable {
     public func clearArmed(ifStill record: ArmedRecord) {
         guard readArmed() == record else { return }
         remove(armedFile)
+    }
+
+    public func readAcknowledgement() -> Acknowledgement? {
+        read(Acknowledgement.self, from: acknowledgementFile)
+    }
+
+    public func writeAcknowledgement(_ acknowledgement: Acknowledgement) throws {
+        try write(acknowledgement, to: acknowledgementFile)
     }
 
     public func readPendingRevert() -> PendingRevert? {

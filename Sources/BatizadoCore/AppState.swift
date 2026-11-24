@@ -55,6 +55,18 @@ public enum Notice: Equatable, Sendable {
     case overheated(ThermalState)
     /// Closed lid was left on but not turned back on at launch: the helper rule is not installed.
     case notRestored
+    /// Closed lid stayed off: no running guardian acknowledged the armed record in time.
+    case guardianNotRunning
+    /// Closed lid was turned off: the guardian exited and none came back in time.
+    case guardianLost
+}
+
+/// Why the app is waiting for a guardian's acknowledgement.
+enum GuardianWait: Equatable, Sendable {
+    /// Before `disablesleep` goes on.
+    case arming
+    /// With the mode on, after the guardian that acknowledged it exited.
+    case reacquiring
 }
 
 public struct AppState: Equatable, Sendable {
@@ -72,6 +84,9 @@ public struct AppState: Equatable, Sendable {
     var awaitingHelperRule = false
     /// The armed record is on disk, so the guardian reverts if this process dies.
     var armed = false
+    /// A live guardian acknowledged the armed record; `disablesleep` goes on only after this.
+    var acknowledged = false
+    var guardianWait: GuardianWait?
     /// Nil until the lid sensor first reports, so a lid already closed at launch is not a closing.
     var lidClosed: Bool?
     var externalDisplay = false
@@ -89,6 +104,8 @@ public struct AppState: Equatable, Sendable {
     }
 
     public var keepAwake: Bool { preferences.keepAwake }
+    /// Closed lid was asked for and waits for the guardian to take charge.
+    public var awaitingGuardian: Bool { guardianWait == .arming }
     public var keepDisplayOn: Bool { preferences.keepDisplayOn }
     public var lockOnLidClose: Bool { preferences.lockOnLidClose }
     public var batteryCutoff: Int { preferences.batteryCutoff }
@@ -163,6 +180,12 @@ public struct AppState: Equatable, Sendable {
             sleepDisabled = disabled
             if disabled == false { return disarmIfOff() }
         case .armingFinished(let succeeded): return armingFinished(succeeded: succeeded)
+        case .acknowledgementFinished(let received): return acknowledgementFinished(received: received)
+        case .guardianExited:
+            guard armed, acknowledged else { return [] }
+            acknowledged = false
+            guardianWait = .reacquiring
+            return [.awaitAcknowledgement]
         case .sleepDisabledSwitched(let disabled):
             if !disabled { return disarmIfOff() }
         case .shutdownRecorded(let reason):
@@ -273,7 +296,12 @@ public struct AppState: Equatable, Sendable {
         guard on else { return [.setSleepDisabled(false)] }
         preferences.closedLid = true
         preferences.keepAwake = true
-        return armed ? [.setSleepDisabled(true)] : [.arm(batteryCutoff: batteryCutoff)]
+        guard armed else { return [.arm(batteryCutoff: batteryCutoff)] }
+        if acknowledged { return [.setSleepDisabled(true)] }
+        // A wait already running ends in the turn on; otherwise start one.
+        let waiting = guardianWait != nil
+        guardianWait = .arming
+        return waiting ? [] : [.awaitAcknowledgement]
     }
 
     private mutating func armingFinished(succeeded: Bool) -> [Effect] {
@@ -286,12 +314,39 @@ public struct AppState: Equatable, Sendable {
             return []
         }
         armed = true
-        return closedLidRequest == true ? [.setSleepDisabled(true)] : disarmIfOff()
+        acknowledged = false
+        guard closedLidRequest == true else { return disarmIfOff() }
+        guardianWait = .arming
+        return [.awaitAcknowledgement]
+    }
+
+    private mutating func acknowledgementFinished(received: Bool) -> [Effect] {
+        guard let wait = guardianWait else { return [] }
+        guardianWait = nil
+        if received {
+            acknowledged = true
+            guard wait == .arming else { return [] }
+            return closedLidRequest == true ? [.setSleepDisabled(true)] : disarmIfOff()
+        }
+        // No guardian would turn the mode off if this process died, so it must not be on.
+        let effects: [Effect]
+        if sleepDisabled == false {
+            closedLidRequest = nil
+            preferences.closedLid = false
+            armed = false
+            effects = [.disarm]
+        } else {
+            effects = setClosedLid(false)
+        }
+        notice = wait == .arming ? .guardianNotRunning : .guardianLost
+        return effects
     }
 
     private mutating func disarmIfOff() -> [Effect] {
         guard armed, closedLidRequest != true else { return [] }
         armed = false
+        acknowledged = false
+        guardianWait = nil
         return [.disarm]
     }
 

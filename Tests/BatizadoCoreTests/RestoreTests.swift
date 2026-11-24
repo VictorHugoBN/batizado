@@ -96,7 +96,8 @@ func nothingComesBackAfterAProtectionFired(reason: ShutdownReason) {
 
 @Test func aCrashReportArrivingAfterTheRestorePutsClosedLidBackOn() {
     let restored = relaunch(closedLidOn().preferences).state
-    let armed = reduce(reduce(restored, .armingFinished(succeeded: true)).state, .sleepDisabledChanged(true))
+    let armed = reduce(
+        acknowledged(reduce(restored, .armingFinished(succeeded: true)).state), .sleepDisabledChanged(true))
     let reverted = reduce(armed.state, .sleepDisabledChanged(false)).state
 
     let (state, effects) = reduce(reverted, .shutdownRecorded(.reboot))

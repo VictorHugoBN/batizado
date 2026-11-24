@@ -16,8 +16,12 @@ func withRule(_ state: AppState) -> AppState {
 
 func closedLidOn() -> AppState {
     let asked = reduce(withRule(running()), .setClosedLid(true)).state
-    let armed = reduce(asked, .armingFinished(succeeded: true)).state
+    let armed = acknowledged(reduce(asked, .armingFinished(succeeded: true)).state)
     return reduce(armed, .sleepDisabledChanged(true)).state
+}
+
+func acknowledged(_ state: AppState) -> AppState {
+    reduce(state, .acknowledgementFinished(received: true)).state
 }
 
 /// A new process on saved preferences, in the app's launch order: the clock, the rule, the readings, any

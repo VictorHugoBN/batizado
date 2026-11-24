@@ -11,6 +11,7 @@ import os
 @MainActor
 final class GuardianService {
     private let shared = SharedState()
+    private let me = SystemFacts.currentProcess
     private var watched: (pid: Int32, source: any DispatchSourceProcess)?
     private var thermal: DarwinSubscription?
     private var retry: (any DispatchSourceTimer)?
@@ -44,7 +45,9 @@ final class GuardianService {
             battery: PowerSource.reading,
             thermal: ThermalPressure.state,
             testMode: BuildMode.testMode,
-            pending: shared.readPendingRevert())
+            pending: shared.readPendingRevert(),
+            guardian: me,
+            acknowledged: shared.readAcknowledgement())
     }
 
     private func reconcile(on trigger: String) {
@@ -129,6 +132,17 @@ final class GuardianService {
     private func run(_ effect: GuardianEffect) -> Bool {
         switch effect {
         case .watchApp(let pid): watch(pid)
+        case .acknowledge(let acknowledgement):
+            do {
+                try shared.writeAcknowledgement(acknowledgement)
+                DarwinNotification.post(SharedState.acknowledged)
+                log.notice(
+                    "Acknowledged the record of pid \(acknowledgement.record.app.pid) as guardian pid \(acknowledgement.guardian.pid)"
+                )
+            } catch {
+                // Without it the app never turns Closed lid on, which is the safe side.
+                log.error("Could not write the acknowledgement: \(error, privacy: .public)")
+            }
         case .markPending(let pending):
             do {
                 try shared.writePendingRevert(pending)

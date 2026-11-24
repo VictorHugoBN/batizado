@@ -50,8 +50,11 @@ left them. They do not come back after a protection, the timer or turning them o
 
 ## Protections
 
-A separate guardian process watches the app and the Mac while Closed lid is on. It turns `disablesleep` back
-off when:
+A separate guardian process watches the app and the Mac while Closed lid is on. Closed lid only turns on
+after the guardian confirms, within 12 seconds, that it is running and watching this copy of the app;
+otherwise it stays off and the menu explains how to bring the guardian back. If the guardian quits while
+Closed lid is on, launchd starts it again, and if no guardian confirms within 12 seconds the app turns Closed
+lid off. The guardian turns `disablesleep` back off when:
 
 - the battery reaches the Low battery cutoff while on battery;
 - macOS reports a serious or critical thermal state;
@@ -83,7 +86,7 @@ rule.
 | Helper rule | `/etc/sudoers.d/batizado` | first time you turn Closed lid on (password) |
 | Guardian LaunchAgent | `~/Library/LaunchAgents/io.github.victorhugobn.batizado.guardian.plist` | every time the app opens |
 | Login LaunchAgent | `~/Library/LaunchAgents/io.github.victorhugobn.batizado.login.plist` | when Launch at login is on |
-| Shared state | `~/Library/Application Support/Batizado/` | while Closed lid is on, and after a shutdown |
+| Shared state | `~/Library/Application Support/Batizado/`: `armed.json`, `acknowledged.json`, `pending-revert.json`, `last-shutdown.json` | while Closed lid is on, and after a shutdown |
 | Preferences | the `io.github.victorhugobn.batizado` defaults domain | when you change a toggle |
 
 **The helper rule.** Changing `disablesleep` needs root. Instead of a root daemon, the app asks once, through

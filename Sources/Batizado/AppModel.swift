@@ -77,6 +77,7 @@ final class AppModel {
         battery.start { [weak self] in self?.send(.batteryChanged($0)) }
         thermal.start { [weak self] in self?.send(.thermalChanged($0)) }
         guardian.installAgent()
+        guardian.watchGuardianExit { [weak self] in self?.send(.guardianExited) }
         guardian.watchShutdowns { [weak self] in self?.send(.shutdownRecorded($0)) }
         // Last, so a waiting sticky reason, the battery and the heat are already known.
         send(.restore)
@@ -93,6 +94,14 @@ final class AppModel {
                     AppInfo.bundleIdentifier + ".debug-launch-at-login-\(on ? "on" : "off")"
                 ) {
                     [weak self] in self?.setLaunchAtLogin(on)
+                }
+            }
+            // Never without the dry helper: with the real one these could open the password window.
+            if DryHelper.isRequested {
+                for (name, event) in DryHelper.events {
+                    DarwinNotification.observe(AppInfo.bundleIdentifier + ".debug-" + name) { [weak self] in
+                        self?.send(event)
+                    }
                 }
             }
         #endif
@@ -174,7 +183,10 @@ final class AppModel {
         case .installHelperRule: send(.helperRuleInstallFinished(helperRule.install()))
         case .removeHelperRule: send(.helperRuleRemovalFinished(helperRule.remove()))
         case .arm(let cutoff): send(.armingFinished(succeeded: guardian.arm(batteryCutoff: cutoff)))
-        case .updateArmed(let cutoff): _ = guardian.arm(batteryCutoff: cutoff)
+        case .updateArmed(let cutoff): guardian.updateArmed(batteryCutoff: cutoff)
+        case .awaitAcknowledgement:
+            guardian.awaitAcknowledgement { [weak self] in self?.send(.acknowledgementFinished(received: $0))
+            }
         case .disarm: guardian.disarm()
         case .lockScreen: _ = screenLock.lock()
         case .requestNotificationPermission: notifier.requestPermission()

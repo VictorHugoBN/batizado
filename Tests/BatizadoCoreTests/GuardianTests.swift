@@ -4,7 +4,8 @@ import Testing
 
 private let app = ProcessIdentity(pid: 4242, startedAt: 1_700_000_000_123_456)
 private let boot: Int64 = 1_699_990_000
-private let armed = ArmedRecord(app: app, bootTime: boot, batteryCutoff: 20)
+private let armed = ArmedRecord(app: app, bootTime: boot, batteryCutoff: 20, id: "first")
+private let me = ProcessIdentity(pid: 600, startedAt: 1_699_995_000_000_000)
 
 private func observe(
     armed record: ArmedRecord? = armed,
@@ -14,7 +15,9 @@ private func observe(
     battery: BatteryReading? = nil,
     thermal: ThermalState? = nil,
     testMode: Bool = false,
-    pending: PendingRevert? = nil
+    pending: PendingRevert? = nil,
+    guardian: ProcessIdentity? = nil,
+    acknowledged: Acknowledgement? = nil
 ) -> [GuardianEffect] {
     reconcile(
         GuardianObservation(
@@ -22,7 +25,9 @@ private func observe(
             battery: battery,
             thermal: thermal,
             testMode: testMode,
-            pending: pending)
+            pending: pending,
+            guardian: guardian,
+            acknowledged: acknowledged)
     )
 }
 
@@ -198,4 +203,44 @@ private func recheck(
     #expect(
         !observe(sleepDisabled: false, battery: BatteryReading(onAC: false, percent: 5)).contains(
             .recheckAfterGrace(armed)))
+}
+
+@Test func armedWithTheAppAliveTheGuardianAcknowledgesThatRecordAsItself() {
+    #expect(
+        observe(guardian: me) == [
+            .watchApp(pid: 4242), .acknowledge(Acknowledgement(record: armed, guardian: me)),
+        ])
+}
+
+@Test func aRecordThisGuardianAlreadyAcknowledgedIsNotAcknowledgedAgain() {
+    let done = Acknowledgement(record: armed, guardian: me)
+
+    #expect(observe(guardian: me, acknowledged: done) == [.watchApp(pid: 4242)])
+}
+
+@Test func aRestartedGuardianAcknowledgesTheRecordAgainAsItself() {
+    let earlier = Acknowledgement(record: armed, guardian: ProcessIdentity(pid: 599, startedAt: 1))
+
+    #expect(
+        observe(guardian: me, acknowledged: earlier).contains(
+            .acknowledge(Acknowledgement(record: armed, guardian: me))))
+}
+
+@Test func nothingIsAcknowledgedWhileARevertIsPending() {
+    let pending = PendingRevert(reason: .battery, record: armed)
+
+    #expect(
+        !observe(pending: pending, guardian: me).contains(
+            .acknowledge(Acknowledgement(record: armed, guardian: me))))
+}
+
+@Test func anAcknowledgementConfirmsOnlyItsOwnRecordFromAGuardianThatIsStillRunning() {
+    let acknowledgement = Acknowledgement(record: armed, guardian: me)
+    let rearmed = ArmedRecord(app: app, bootTime: boot, batteryCutoff: 20, id: "second")
+    let pidReused = ProcessIdentity(pid: me.pid, startedAt: me.startedAt + 1)
+
+    #expect(acknowledgement.confirms(armed, guardianNow: me))
+    #expect(!acknowledgement.confirms(armed, guardianNow: nil))
+    #expect(!acknowledgement.confirms(armed, guardianNow: pidReused))
+    #expect(!acknowledgement.confirms(rearmed, guardianNow: me))
 }

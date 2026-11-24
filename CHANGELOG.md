@@ -51,6 +51,8 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
   disk and retried, backing off up to once a minute, until `disablesleep` is off, across guardian restarts.
 - Fix Closed lid staying on with no owner when the app dies while its `disablesleep 1` is still running: the
   guardian checks again 5 s after cleaning up and turns it off if it appeared.
+- Fix Closed lid turning on with no guardian running: it now waits for a running guardian to acknowledge it
+  (12 s at most, also at launch), and turns off if the guardian quits and does not come back.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

@@ -2,12 +2,16 @@ import Testing
 
 @testable import BatizadoCore
 
-@Test func closedLidArmsTheGuardianAndWaitsForItBeforeDisablingSleep() {
+@Test func closedLidArmsTheGuardianAndWaitsForItsAcknowledgementBeforeDisablingSleep() {
     let (asked, effects) = reduce(withRule(running()), .setClosedLid(true))
     #expect(effects.contains(.arm(batteryCutoff: 20)))
     #expect(!effects.contains(.setSleepDisabled(true)))
 
-    #expect(reduce(asked, .armingFinished(succeeded: true)).effects == [.setSleepDisabled(true)])
+    let (armed, armedEffects) = reduce(asked, .armingFinished(succeeded: true))
+    #expect(armedEffects == [.awaitAcknowledgement])
+    #expect(armed.awaitingGuardian)
+
+    #expect(reduce(armed, .acknowledgementFinished(received: true)).effects == [.setSleepDisabled(true)])
 }
 
 @Test func installingTheRuleArmsBeforeDisablingSleep() {

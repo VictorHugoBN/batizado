@@ -237,7 +237,10 @@
         func load() -> Preferences { Preferences() }
         func save(_ preferences: Preferences) {}
         func arm(batteryCutoff: Int) -> Bool { true }
+        func updateArmed(batteryCutoff: Int) {}
         func disarm() {}
+        func awaitAcknowledgement(onFinished: @escaping @MainActor (Bool) -> Void) { onFinished(true) }
+        func watchGuardianExit(_ onExit: @escaping @MainActor () -> Void) {}
         func watchShutdowns(onRecorded: @escaping @MainActor (ShutdownReason) -> Void) {}
         func installAgent() {}
         func lock() -> Bool { true }

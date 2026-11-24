@@ -44,15 +44,18 @@ public struct ArmedRecord: Codable, Equatable, Sendable {
     public let bootTime: Int64
     /// The low battery cutoff in percent, rewritten when the user changes it while armed.
     public let batteryCutoff: Int
+    /// New each time the app arms, so an acknowledgement of an earlier, identical record never counts.
+    public let id: String
 
-    public init(app: ProcessIdentity, bootTime: Int64, batteryCutoff: Int) {
+    public init(app: ProcessIdentity, bootTime: Int64, batteryCutoff: Int, id: String = "") {
         self.app = app
         self.bootTime = bootTime
         self.batteryCutoff = batteryCutoff
+        self.id = id
     }
 
     private enum CodingKeys: String, CodingKey {
-        case app, bootTime, batteryCutoff
+        case app, bootTime, batteryCutoff, id
     }
 
     // A record from a build without the cutoff must still be honored, or the guardian would ignore it.
@@ -62,6 +65,27 @@ public struct ArmedRecord: Codable, Equatable, Sendable {
         bootTime = try container.decode(Int64.self, forKey: .bootTime)
         batteryCutoff =
             try container.decodeIfPresent(Int.self, forKey: .batteryCutoff) ?? BatteryCutoff.standard
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    }
+}
+
+/// Written by a guardian that took charge of an armed record; the app turns `disablesleep` on only after one.
+public struct Acknowledgement: Codable, Equatable, Sendable {
+    public let record: ArmedRecord
+    /// The guardian process that wrote it.
+    public let guardian: ProcessIdentity
+
+    public init(record: ArmedRecord, guardian: ProcessIdentity) {
+        self.record = record
+        self.guardian = guardian
+    }
+}
+
+extension Acknowledgement {
+    /// True only for this exact record, from a guardian that is still the same running process; an
+    /// acknowledgement left by a guardian that exited, or for an earlier record, never counts.
+    public func confirms(_ current: ArmedRecord, guardianNow: ProcessIdentity?) -> Bool {
+        record == current && guardianNow == guardian
     }
 }
 
@@ -93,13 +117,20 @@ public struct GuardianObservation: Equatable, Sendable {
     public let testMode: Bool
     /// A revert decided earlier and not finished, by this guardian process or an earlier one.
     public let pending: PendingRevert?
+    /// This guardian process; nil when it cannot be read, and then it acknowledges nothing.
+    public let guardian: ProcessIdentity?
+    /// The acknowledgement on disk, from this guardian or an earlier one.
+    public let acknowledged: Acknowledgement?
 
     public init(
         armed: ArmedRecord?, sleepDisabled: Bool?, process: ProcessIdentity?, bootTime: Int64,
         battery: BatteryReading? = nil, thermal: ThermalState? = nil, testMode: Bool = false,
-        pending: PendingRevert? = nil
+        pending: PendingRevert? = nil, guardian: ProcessIdentity? = nil,
+        acknowledged: Acknowledgement? = nil
     ) {
         self.pending = pending
+        self.guardian = guardian
+        self.acknowledged = acknowledged
         self.testMode = testMode
         self.thermal = thermal
         self.armed = armed
@@ -115,6 +146,8 @@ public struct GuardianObservation: Equatable, Sendable {
 /// retry, which only exists while a revert is pending.
 public enum GuardianEffect: Equatable, Sendable {
     case watchApp(pid: Int32)
+    /// Write the acknowledgement and tell the app.
+    case acknowledge(Acknowledgement)
     /// Store the decision before acting on it; a failure to store it does not stop the revert.
     case markPending(PendingRevert)
     /// Run `/usr/bin/sudo -n /usr/bin/pmset -a disablesleep 0`; stop here if it fails.
@@ -132,6 +165,9 @@ public enum GuardianEffect: Equatable, Sendable {
 public enum GuardianTiming {
     /// How long after clearing a dead app's record a `disablesleep 1` it launched may still land.
     public static let recheckGrace = 5
+    /// How long the app waits for a guardian to acknowledge its record: when it arms, and when the guardian
+    /// exits and launchd should bring it back (an early exit is restarted after up to 10 s).
+    public static let acknowledgementWait = 12
 }
 
 /// Run at guardian start, when the app's process exits, when the armed record changes, when the power
@@ -149,7 +185,7 @@ public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
         } else if observation.battery?.reachesCutoff(cutoff) == true {
             reason = .battery
         } else {
-            return [.watchApp(pid: armed.app.pid)]
+            return [.watchApp(pid: armed.app.pid)] + acknowledge(armed, observation)
         }
     } else {
         reason = observation.bootTime == armed.bootTime ? .appDied : .reboot
@@ -162,6 +198,13 @@ public func reconcile(_ observation: GuardianObservation) -> [GuardianEffect] {
 /// An app that died right after launching `disablesleep 1` leaves it to land after its record is gone.
 private func recheck(_ pending: PendingRevert, _ sleepDisabled: Bool?) -> [GuardianEffect] {
     pending.reason == .appDied && sleepDisabled != true ? [.recheckAfterGrace(pending.record)] : []
+}
+
+/// Written once per record and guardian process, not again on every battery change.
+private func acknowledge(_ armed: ArmedRecord, _ observation: GuardianObservation) -> [GuardianEffect] {
+    guard let guardian = observation.guardian else { return [] }
+    let acknowledgement = Acknowledgement(record: armed, guardian: guardian)
+    return observation.acknowledged == acknowledgement ? [] : [.acknowledge(acknowledgement)]
 }
 
 /// Runs the command unless `SleepDisabled` is confirmed 0; an unknown value is reverted too.

@@ -7,7 +7,8 @@ import Testing
 
     #expect(state.keepAwake)
     #expect(effects.contains(.hold(.systemIdle)))
-    #expect(reduce(state, .armingFinished(succeeded: true)).effects.contains(.setSleepDisabled(true)))
+    let armed = reduce(state, .armingFinished(succeeded: true)).state
+    #expect(reduce(armed, .acknowledgementFinished(received: true)).effects.contains(.setSleepDisabled(true)))
 }
 
 @Test func closedLidWithoutTheRuleAsksToInstallItAndChangesNothingYet() {
@@ -24,7 +25,8 @@ import Testing
 
     #expect(state.helperRule == .installed)
     #expect(state.keepAwake)
-    #expect(reduce(state, .armingFinished(succeeded: true)).effects.contains(.setSleepDisabled(true)))
+    let armed = reduce(state, .armingFinished(succeeded: true)).state
+    #expect(reduce(armed, .acknowledgementFinished(received: true)).effects.contains(.setSleepDisabled(true)))
 }
 
 @Test func cancellingThePasswordWindowLeavesEverythingOff() {

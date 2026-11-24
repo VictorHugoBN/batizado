@@ -49,7 +49,15 @@ struct BatizadoApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let model = AppModel()
+    let model: AppModel = {
+        #if DEBUG
+            if DryHelper.isRequested {
+                DryHelper.log.notice("Dry helper: the rule reads as installed and pmset is not run")
+                return AppModel(sleepSwitch: DrySleepDisabledSwitch(), helperRule: DryHelperRule())
+            }
+        #endif
+        return AppModel()
+    }()
     private var terminationSignal: (any DispatchSourceSignal)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -181,6 +189,10 @@ private struct ClosedLidStatus: View {
                     ? "Closed lid is not active. The Mac will sleep when the lid closes."
                     : "Closed lid is still active. The Mac will stay awake with the lid closed.")
         }
+        if state.awaitingGuardian {
+            PanelNote(
+                text: "Waiting for the guardian to take charge before Closed lid turns on.", isWarning: false)
+        }
         if let text = state.notice?.text {
             PanelNote(text: text)
         }
@@ -205,6 +217,10 @@ extension Notice {
             "Closed lid stayed off: the Mac is too hot (\(thermal.rawValue) thermal state). Let it cool down and try again."
         case .notRestored:
             "Closed lid was on when Batizado quit, but it was not turned back on because the helper rule is not installed. Turn Closed lid on to install it."
+        case .guardianNotRunning:
+            "Closed lid stayed off: the guardian that turns it off if Batizado stops did not answer. Allow Batizado in System Settings > General > Login Items & Extensions, then quit and reopen Batizado."
+        case .guardianLost:
+            "Closed lid was turned off: the guardian that turns it off if Batizado stops quit and did not come back. Quit and reopen Batizado to start it again."
         }
     }
 }
