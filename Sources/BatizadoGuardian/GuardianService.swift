@@ -72,9 +72,9 @@ final class GuardianService {
     private func recheck(afterClearing record: ArmedRecord) {
         let observation = observe()
         let effects = BatizadoCore.recheck(afterClearing: record, observation)
-        log.notice(
+        let message =
             "Rechecked after clearing pid \(record.app.pid): armed pid \(observation.armed.map { String($0.app.pid) } ?? "none"), SleepDisabled \(observation.sleepDisabled.sleepDisabledText), effects \(effects)"
-        )
+        log.notice("\(message, privacy: .public)")
         perform(effects)
     }
 
