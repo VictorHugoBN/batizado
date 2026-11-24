@@ -1,0 +1,4 @@
+[core]
+  autocrlf = input  # Handle line endings consistently
+  ignorecase = false  # Enforce case-sensitivity
+  safecrlf = true  # Warn when changing line endings on commit

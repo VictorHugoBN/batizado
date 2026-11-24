@@ -1,0 +1,30 @@
+# Build
+.build/
+build/
+.swiftpm/
+*.xcodeproj
+xcuserdata/
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Local overrides and environment
+Makefile.local
+.env
+.env.*
+
+# Coding agents: personal workflow, skills and plans stay out of the public repo.
+# AGENTS.md is the only agent file that is versioned. Do not add CLAUDE.md or
+# CLAUDE.local.md: either one stops Claude Code from reading AGENTS.md.
+.claude/
+.agents/
+.superset/
+plans/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.override.md
+
+# Editors
+.vscode/
+.idea/
