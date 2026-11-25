@@ -1,9 +1,18 @@
+<p align="center">
+  <img src="assets/AppIcon.svg" width="160" alt="Batizado icon: a bottle of rum pouring into a cup of coffee">
+</p>
+
 # Batizado
 
 A macOS menu bar app that keeps your MacBook awake with the lid closed, so long-running coding agents keep
-working while you check on them remotely.
+working while you check on them remotely. Coffee keeps you awake; a shot of rum in it keeps the Mac awake
+even with the lid shut.
 
-> *Café batizado* is Brazilian for coffee "baptized" with a shot of something stronger.
+## The name
+
+*Café batizado* is Brazilian for coffee "baptized" with a shot of something stronger, usually cachaça or
+rum. Plain coffee is what Keep awake does. Closed lid is the stronger stuff, so its menu bar icon is the cup
+with the bottle pouring in.
 
 **Status: 0.1.0, the first release.** It runs on one kind of machine the maintainer owns (an Apple Silicon
 MacBook on macOS 27). The decision logic is unit tested; everything that touches the system (the lid, the
@@ -44,8 +53,9 @@ Click the cup in the menu bar. The rows, top to bottom:
   and the menu says why: without the rule nothing could turn it off later.
 - **Quit**: turns off what the app turned on and quits.
 
-The menu bar icon has four states: off, awake, closed lid, and a warning when the real `SleepDisabled` value
-differs from what you asked for.
+The menu bar icon has four states: an empty cup (off), a steaming cup (Keep awake), a full cup with a bottle
+pouring into it (Closed lid), and the cup with a warning badge when the real `SleepDisabled` value differs
+from what you asked for.
 
 When you open Batizado again after Quit, a crash or a restart, Keep awake and Closed lid come back as you
 left them. They do not come back after a protection, the timer or turning them off yourself.
