@@ -19,6 +19,8 @@ a `CLAUDE.md` or `CLAUDE.local.md`: either one stops Claude Code from reading th
 - `Sources/BatizadoGuardian/` — the watchdog executable, shipped inside the app bundle
 - `Tests/BatizadoCoreTests/` — unit tests for the core (Swift Testing)
 - `assets/` — `AppIcon.svg` (the app icon's source) and the generated `AppIcon.icns`, both committed
+- `assets/readme/` — images the README shows: popover snapshots (regenerate with `--write-snapshots`) and the
+  four menu bar states as SVG, each in a light and a dark variant
 - `scripts/bundle.sh` — assembles and ad-hoc signs `build/Batizado.app`, copying in `assets/AppIcon.icns`
 - `scripts/make-icon.sh` and `scripts/render-svg.swift` — `make icon` regenerates the `.icns` from the SVG
   with AppKit and `iconutil`; run it after editing the SVG and commit both
@@ -48,8 +50,6 @@ a `CLAUDE.md` or `CLAUDE.local.md`: either one stops Claude Code from reading th
   change per commit. Stage specific files; never `git add -A`.
 - Branches: until v1.0 the maintainer commits straight to `main`. Contributions
   and everything after v1.0 use `type/slug` branches off `main`, merged through a pull request.
-- `CHANGELOG.md`: one bullet per user-visible change under `[Unreleased]`, at most two lines, starting with
-  Add, Change, Deprecate, Remove, Fix or Security.
 - Comments: none by default. When one is needed, a single line explaining why, not what.
 - Formatting is owned by `swift format` with the repo's `.swift-format`; do not hand-format against it.
 - Tests exercise observable behavior through a module's public interface: given a state and an event, assert
