@@ -60,6 +60,7 @@ Each entry starts with one of: Add, Change, Deprecate, Remove, Fix, Security.
 - Change the menu bar icons to Batizado's own drawings: an empty cup when off, a steaming cup for Keep
   awake, a full cup with a bottle pouring into it for Closed lid, and the cup with a warning badge.
 - Add an app icon: an amber bottle pouring into a cream coffee cup on a dark sea-green background.
+- Change the popover to a rum amber accent with red warnings, and show the app icon in its header.
 
 [Unreleased]: https://github.com/VictorHugoBN/batizado/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorHugoBN/batizado/releases/tag/v0.1.0

@@ -83,8 +83,11 @@ struct MenuPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "cup.and.saucer.fill")
-                    .foregroundStyle(Palette.accent)
+                // The app icon as a logo; the pouring glyph would read as "Closed lid is on".
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
                 Text(AppInfo.name)
                     .font(.headline)
             }

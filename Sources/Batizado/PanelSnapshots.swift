@@ -18,6 +18,10 @@
 
         static func write(to directory: URL) {
             _ = NSApplication.shared
+            // A bare binary has no bundle icon; run from the repository root to get the real one in the header.
+            if let icon = NSImage(contentsOfFile: "assets/AppIcon.icns") {
+                NSApplication.shared.applicationIconImage = icon
+            }
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             for (name, model) in scenarios() {
                 for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {

@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// Coffee tones for the popover. Every text color keeps at least 4.5:1 against the light and dark panel.
+/// Rum amber for what is on, coffee for the rest. Every text color keeps at least 4.5:1 against the light
+/// (#E4E4E4 to white) and dark (#1E1E1E to #3A3A3A) panel.
 enum Palette {
-    static let accent = Tone(light: 0x7A4A2E, dark: 0xD29A66)
+    static let accent = Tone(light: 0x8A5600, dark: 0xE3962F)
     static let icon = Tone(light: 0x8A5A3C, dark: 0xD7A982)
     static let track = Tone(light: 0xE6DBD0, dark: 0x4A3F38)
     /// Outline of a switch that is off, at 3:1 so the control is visible without its fill.
-    static let trackEdge = Tone(light: 0x957F6F, dark: 0x93806F)
-    static let warning = Tone(light: 0xA3400F, dark: 0xF59A5B)
-    static let highlight = Tone(light: 0x7A4A2E, dark: 0xD29A66, opacity: 0.12)
+    static let trackEdge = Tone(light: 0x927C6C, dark: 0x93806F)
+    /// Red rather than orange, so a warning never reads as the amber accent.
+    static let warning = Tone(light: 0xB42318, dark: 0xFF8C7A)
+    static let highlight = Tone(light: 0x8A5600, dark: 0xE3962F, opacity: 0.12)
 }
 
 struct Tone: ShapeStyle {
