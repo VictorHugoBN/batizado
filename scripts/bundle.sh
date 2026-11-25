@@ -8,10 +8,12 @@
 #   VERSION    CFBundleShortVersionString
 #   BIN_DIR    directory holding the built executables
 #   APP_BUNDLE output path of the .app
+#   ICON       the committed .icns to ship        (assets/AppIcon.icns)
 
 set -euo pipefail
 
 : "${APP_NAME:?}" "${BUNDLE_ID:?}" "${VERSION:?}" "${BIN_DIR:?}" "${APP_BUNDLE:?}"
+ICON="${ICON:-assets/AppIcon.icns}"
 
 GUARDIAN_NAME="${APP_NAME}Guardian"
 
@@ -27,11 +29,17 @@ for exe in "$APP_NAME" "$GUARDIAN_NAME"; do
   fi
 done
 
+if [ ! -f "$ICON" ]; then
+  echo "bundle: missing icon $ICON (run 'make icon')" >&2
+  exit 1
+fi
+
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
 cp "$BIN_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "$BIN_DIR/$GUARDIAN_NAME" "$APP_BUNDLE/Contents/MacOS/$GUARDIAN_NAME"
+cp "$ICON" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 
 # LSUIElement keeps the app out of the Dock and the app switcher: it lives in the menu bar only.
 cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
@@ -42,6 +50,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<EOF
   <key>CFBundleName</key><string>$APP_NAME</string>
   <key>CFBundleDisplayName</key><string>$APP_NAME</string>
   <key>CFBundleExecutable</key><string>$APP_NAME</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>

@@ -30,7 +30,7 @@ help: ## Show this help
 # Build
 # ──────────────────────────────────────────────────────────────────────────────
 
-.PHONY: build app run clean
+.PHONY: build app icon run clean
 
 build: ## Compile the app and the guardian (CONFIG=release|debug)
 	swift build -c $(CONFIG)
@@ -39,6 +39,9 @@ app: build ## Assemble and ad-hoc sign build/Batizado.app
 	@APP_NAME="$(APP_NAME)" BUNDLE_ID="$(BUNDLE_ID)" VERSION="$(VERSION)" \
 	  BIN_DIR="$$(swift build -c $(CONFIG) --show-bin-path)" APP_BUNDLE="$(APP_BUNDLE)" \
 	  ./scripts/bundle.sh
+
+icon: ## Regenerate assets/AppIcon.icns from assets/AppIcon.svg (commit both)
+	./scripts/make-icon.sh
 
 run: app ## Rebuild, quit any running copy, restart the guardian and launch the app
 	@$(LIFECYCLE) quit

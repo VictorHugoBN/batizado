@@ -18,7 +18,10 @@ a `CLAUDE.md` or `CLAUDE.local.md`: either one stops Claude Code from reading th
   effects through one adapter per system service (sensors, `sudo -n pmset`, LaunchAgents, lock, notifications)
 - `Sources/BatizadoGuardian/` — the watchdog executable, shipped inside the app bundle
 - `Tests/BatizadoCoreTests/` — unit tests for the core (Swift Testing)
-- `scripts/bundle.sh` — assembles and ad-hoc signs `build/Batizado.app`
+- `assets/` — `AppIcon.svg` (the app icon's source) and the generated `AppIcon.icns`, both committed
+- `scripts/bundle.sh` — assembles and ad-hoc signs `build/Batizado.app`, copying in `assets/AppIcon.icns`
+- `scripts/make-icon.sh` and `scripts/render-svg.swift` — `make icon` regenerates the `.icns` from the SVG
+  with AppKit and `iconutil`; run it after editing the SVG and commit both
 - `scripts/lifecycle.sh` — quits the app, restarts the guardian and uninstalls; called by the Makefile
 - `Makefile` — every workflow goes through it; run `make help`
 
