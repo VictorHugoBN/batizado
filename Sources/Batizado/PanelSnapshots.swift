@@ -26,7 +26,8 @@
                         to: directory.appending(path: "\(name)-\(suffix).png"))
                 }
             }
-            save(menuBarStrip(), to: directory.appending(path: "menubar.png"))
+            save(menuBarStrip(pixelScale: 1), to: directory.appending(path: "menubar@1x.png"))
+            save(menuBarStrip(pixelScale: 2), to: directory.appending(path: "menubar@2x.png"))
         }
 
         private static func scenarios() -> [(String, AppModel)] {
@@ -93,20 +94,18 @@
             return rep
         }
 
-        private static func menuBarStrip() -> NSBitmapImageRep {
+        /// One strip per pixel scale, drawn at that scale, so 1x shows exactly what a non-Retina display gets.
+        private static func menuBarStrip(pixelScale: CGFloat) -> NSBitmapImageRep {
             let icons: [MenuBarIcon] = [.off, .awake, .closedLid, .diverged]
             let bars: [(NSColor, NSColor)] = [
                 (NSColor(white: 0.94, alpha: 1), .black), (NSColor(white: 0.13, alpha: 1), .white),
             ]
-            let scales: [CGFloat] = [1, 2]
             let cell = NSSize(width: 30, height: 24)
             let size = NSSize(
-                width: cell.width * CGFloat(icons.count) * CGFloat(scales.count) + 10,
-                height: cell.height * CGFloat(bars.count))
-            let pixels = 2.0
+                width: cell.width * CGFloat(icons.count), height: cell.height * CGFloat(bars.count))
             let rep = NSBitmapImageRep(
-                bitmapDataPlanes: nil, pixelsWide: Int(size.width * pixels),
-                pixelsHigh: Int(size.height * pixels),
+                bitmapDataPlanes: nil, pixelsWide: Int(size.width * pixelScale),
+                pixelsHigh: Int(size.height * pixelScale),
                 bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                 colorSpaceName: .deviceRGB,
                 bytesPerRow: 0, bitsPerPixel: 0)!
@@ -117,14 +116,10 @@
                 let y = size.height - CGFloat(row + 1) * cell.height
                 bar.setFill()
                 NSRect(x: 0, y: y, width: size.width, height: cell.height).fill()
-                for (group, scale) in scales.enumerated() {
-                    for (column, icon) in icons.enumerated() {
-                        let x =
-                            CGFloat(group) * (cell.width * CGFloat(icons.count) + 10) + CGFloat(column)
-                            * cell.width
-                        let tinted = tint(icon.image, ink, pixelScale: scale)
-                        tinted.draw(in: NSRect(x: x + 4, y: y + 3, width: 22, height: 18))
-                    }
+                for (column, icon) in icons.enumerated() {
+                    let tinted = tint(icon.image, ink, pixelScale: pixelScale)
+                    tinted.draw(
+                        in: NSRect(x: CGFloat(column) * cell.width + 4, y: y + 3, width: 22, height: 18))
                 }
             }
             NSGraphicsContext.restoreGraphicsState()
